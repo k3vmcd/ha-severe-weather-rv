@@ -10,27 +10,28 @@
       },
       "device_tracker": {
         "title": "Select GPS Entity",
-        "description": "Choose the device_tracker or person entity that tracks your RV. It must have latitude and longitude attributes.",
+        "description": "Choose a device_tracker, person, sensor, or zone entity that tracks your RV. It must have latitude and longitude attributes.",
         "data": {
           "gps_entity": "GPS Entity"
         }
       },
       "input_numbers": {
-        "title": "Select Coordinate Helpers",
-        "description": "Choose the two input_number helpers that store your RV's latitude and longitude.",
+        "title": "Select Coordinate Entities",
+        "description": "Choose two entities (sensor, input_number, or number helper) that each store a numeric latitude or longitude value.",
         "data": {
-          "gps_lat_entity": "Latitude Helper",
-          "gps_lon_entity": "Longitude Helper"
+          "gps_lat_entity": "Latitude Entity",
+          "gps_lon_entity": "Longitude Entity"
         }
       }
     },
     "error": {
       "entity_not_found": "Entity not found in Home Assistant",
       "no_coordinates": "This entity does not have latitude/longitude attributes",
-      "invalid_coordinates": "Helpers contain non-numeric values"
+      "invalid_coordinates": "Entities contain non-numeric values"
     },
     "abort": {
-      "already_configured": "Severe Weather RV Monitor is already configured"
+      "already_configured": "Severe Weather RV Monitor is already configured",
+      "home_location_not_set": "Home Assistant home location (latitude/longitude) is not configured"
     }
   },
   "options": {

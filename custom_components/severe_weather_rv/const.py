@@ -23,6 +23,11 @@ DEFAULT_OUTLOOK_SCAN_INTERVAL = 3600  # 1 hour
 NWS_ALERTS_URL = "https://api.weather.gov/alerts/active"
 NHC_STORMS_URL = "https://www.nhc.noaa.gov/CurrentStorms.json"
 NWS_USER_AGENT = "(severe_weather_rv Home Assistant integration)"
+SPC_IMAGE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
 
 # Ordered highest → lowest severity
 SEVERITY_ORDER = ["Extreme", "Severe", "Moderate", "Minor", "Unknown"]

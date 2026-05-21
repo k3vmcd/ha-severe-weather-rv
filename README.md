@@ -36,7 +36,7 @@ Data sources: **NOAA NWS Alerts API**, **SPC (Storm Prediction Center)**, **NHC 
 ### Via HACS (recommended)
 
 1. Open HACS → **Integrations** → three-dot menu → **Custom repositories**
-2. Add URL: `https://github.com/yourusername/ha-severe-weather-rv`  
+2. Add URL: `https://github.com/k3vmcd/ha-severe-weather-rv`  
    Category: **Integration**
 3. Find **Severe Weather RV Monitor** in HACS and click **Download**
 4. Restart Home Assistant
@@ -83,8 +83,8 @@ Two blueprints are included and copied to your `blueprints/` directory on instal
 1. Go to **Settings → Automations & Scenes → Blueprints**
 2. Click **Import Blueprint**
 3. Paste the raw GitHub URL for each blueprint:
-   - Threat alert: `https://raw.githubusercontent.com/yourusername/ha-severe-weather-rv/main/blueprints/automation/severe_weather_rv/threat_alert.yaml`
-   - Morning briefing: `https://raw.githubusercontent.com/yourusername/ha-severe-weather-rv/main/blueprints/automation/severe_weather_rv/morning_briefing.yaml`
+   - Threat alert: `https://raw.githubusercontent.com/k3vmcd/ha-severe-weather-rv/main/blueprints/automation/severe_weather_rv/threat_alert.yaml`
+   - Morning briefing: `https://raw.githubusercontent.com/k3vmcd/ha-severe-weather-rv/main/blueprints/automation/severe_weather_rv/morning_briefing.yaml`
 
 ### Threat Alert Blueprint
 Fires when any tornado, severe thunderstorm, or hurricane threat becomes active. Sends a rich notification with the SPC Day 1 outlook image attached and a tap-through to your dashboard. Supports iOS Critical Alerts for warnings.
@@ -147,60 +147,65 @@ Sends a daily summary at your chosen time with current threat levels and the Day
 ## Dashboard
 
 Create a new dashboard view and paste this YAML (Edit Dashboard → Raw configuration editor).  
-Requires `mushroom` cards from HACS.
+Requires `mushroom` cards from HACS. The layout uses the **Sections** view type (Home Assistant 2024.1+), which groups cards into named, collapsible sections arranged in a two-column grid. Tornado and hail probability maps each occupy a full-width row so they're large and easy to read at a glance.
 
 ```yaml
 title: Severe Weather
 path: severe-weather
 icon: mdi:weather-lightning-rainy
-cards:
+type: sections
+max_columns: 2
 
-  # ── Summary header ────────────────────────────────────────────────────
-  - type: custom:mushroom-template-card
-    primary: "{{ states('sensor.severe_weather_rv_monitor_severe_weather_summary') }}"
-    secondary: "{{ states('sensor.severe_weather_rv_monitor_top_alert_headline') }}"
-    icon: mdi:weather-lightning-rainy
-    icon_color: >
-      {% set s = states('sensor.severe_weather_rv_monitor_severe_weather_summary') %}
-      {{ 'red' if 'EMERGENCY' in s or 'WARNING' in s
-         else 'orange' if 'THREAT' in s or 'WATCH' in s
-         else 'green' }}
-    multiline_secondary: true
-    tap_action:
-      action: none
+sections:
 
-  # ── Threat tiles ──────────────────────────────────────────────────────
-  - type: horizontal-stack
+  # ── Summary header + threat tiles ────────────────────────────────────
+  - title: Current Status
+    column_span: 2
     cards:
       - type: custom:mushroom-template-card
-        primary: Tornado
-        secondary: "{{ states('sensor.severe_weather_rv_monitor_tornado_threat_level') }}"
-        icon: mdi:weather-tornado
-        fill_container: true
+        primary: "{{ states('sensor.severe_weather_rv_monitor_severe_weather_summary') }}"
+        secondary: "{{ states('sensor.severe_weather_rv_monitor_top_alert_headline') }}"
+        icon: mdi:weather-lightning-rainy
         icon_color: >
-          {% set t = states('sensor.severe_weather_rv_monitor_tornado_threat_level') %}
-          {{ 'red' if t in ['WARNING','EMERGENCY'] else 'orange' if t == 'WATCH' else 'green' }}
+          {% set s = states('sensor.severe_weather_rv_monitor_severe_weather_summary') %}
+          {{ 'red' if 'EMERGENCY' in s or 'WARNING' in s
+             else 'orange' if 'THREAT' in s or 'WATCH' in s
+             else 'green' }}
+        multiline_secondary: true
+        tap_action:
+          action: none
 
-      - type: custom:mushroom-template-card
-        primary: Hail / Tstorm
-        secondary: "{{ states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') }}"
-        icon: mdi:weather-hail
-        fill_container: true
-        icon_color: >
-          {% set s = states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') %}
-          {{ 'red' if s == 'WARNING' else 'orange' if s == 'WATCH' else 'green' }}
+      - type: horizontal-stack
+        cards:
+          - type: custom:mushroom-template-card
+            primary: Tornado
+            secondary: "{{ states('sensor.severe_weather_rv_monitor_tornado_threat_level') }}"
+            icon: mdi:weather-tornado
+            fill_container: true
+            icon_color: >
+              {% set t = states('sensor.severe_weather_rv_monitor_tornado_threat_level') %}
+              {{ 'red' if t in ['WARNING','EMERGENCY'] else 'orange' if t == 'WATCH' else 'green' }}
 
-      - type: custom:mushroom-template-card
-        primary: Hurricane
-        secondary: "{{ states('sensor.severe_weather_rv_monitor_hurricane_threat_level') }}"
-        icon: mdi:weather-hurricane
-        fill_container: true
-        icon_color: >
-          {% set h = states('sensor.severe_weather_rv_monitor_hurricane_threat_level') %}
-          {{ 'red' if 'WARNING' in h or 'EMERGENCY' in h else 'orange' if 'WATCH' in h else 'green' }}
+          - type: custom:mushroom-template-card
+            primary: Hail / Tstorm
+            secondary: "{{ states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') }}"
+            icon: mdi:weather-hail
+            fill_container: true
+            icon_color: >
+              {% set s = states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') %}
+              {{ 'red' if s == 'WARNING' else 'orange' if s == 'WATCH' else 'green' }}
 
-  # ── Location + alert count ────────────────────────────────────────────
-  - type: horizontal-stack
+          - type: custom:mushroom-template-card
+            primary: Hurricane
+            secondary: "{{ states('sensor.severe_weather_rv_monitor_hurricane_threat_level') }}"
+            icon: mdi:weather-hurricane
+            fill_container: true
+            icon_color: >
+              {% set h = states('sensor.severe_weather_rv_monitor_hurricane_threat_level') %}
+              {{ 'red' if 'WARNING' in h or 'EMERGENCY' in h else 'orange' if 'WATCH' in h else 'green' }}
+
+  # ── Location ──────────────────────────────────────────────────────────
+  - title: Location
     cards:
       - type: custom:mushroom-template-card
         primary: "{{ states('sensor.severe_weather_rv_monitor_alert_count') }} Active Alerts"
@@ -208,66 +213,83 @@ cards:
           {{ states('sensor.severe_weather_rv_monitor_monitored_latitude') }}°,
           {{ states('sensor.severe_weather_rv_monitor_monitored_longitude') }}°
         icon: mdi:map-marker-radius
-        fill_container: true
 
       - type: custom:mushroom-template-card
         primary: "{{ states('sensor.severe_weather_rv_monitor_nhc_active_storms') }} Named Storm(s)"
         secondary: "NHC Active Tropics"
         icon: mdi:weather-hurricane
-        fill_container: true
 
   # ── Active alert details ──────────────────────────────────────────────
-  - type: conditional
-    conditions:
-      - entity: binary_sensor.severe_weather_rv_monitor_any_alert_active
-        state: "on"
-    card:
-      type: markdown
-      title: "Active NWS Alerts"
-      content: >
-        {% set alerts = state_attr('sensor.severe_weather_rv_monitor_top_alert_headline', 'all_alerts') or [] %}
-        {% if alerts | length == 0 %}
-        ✅ No active alerts.
-        {% else %}
-        {% for a in alerts %}
-        **{{ a.event }}** — {{ a.severity }}
-        *{{ a.headline }}*
-        Expires: {{ a.expires }}
-        ---
-        {% endfor %}
-        {% endif %}
+  - title: Active Alerts
+    cards:
+      - type: conditional
+        conditions:
+          - entity: binary_sensor.severe_weather_rv_monitor_any_alert_active
+            state: "on"
+        card:
+          type: markdown
+          title: "Active NWS Alerts"
+          content: >
+            {% set alerts = state_attr('sensor.severe_weather_rv_monitor_top_alert_headline', 'all_alerts') or [] %}
+            {% if alerts | length == 0 %}
+            ✅ No active alerts.
+            {% else %}
+            {% for a in alerts %}
+            **{{ a.event }}** — {{ a.severity }}
+            *{{ a.headline }}*
+            Expires: {{ a.expires }}
+            ---
+            {% endfor %}
+            {% endif %}
 
-  # ── SPC Day 1 maps ────────────────────────────────────────────────────
-  - type: markdown
-    content: "## SPC Convective Outlooks"
+  # ── SPC Day 1 categorical (full-width) ───────────────────────────────
+  - title: "SPC Day 1 — Categorical Risk"
+    column_span: 2
+    cards:
+      - type: picture-entity
+        entity: camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
+        name: "Day 1 Categorical"
+        show_state: false
+        tap_action:
+          action: url
+          url_path: "https://www.spc.noaa.gov/products/outlook/"
 
-  - type: picture-entity
-    entity: camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
-    name: "Day 1 — Categorical Risk"
-    show_state: false
-    tap_action:
-      action: url
-      url_path: "https://www.spc.noaa.gov/products/outlook/"
-
-  - type: horizontal-stack
+  # ── Day 1 tornado probability (full-width for readability) ────────────
+  - title: "Day 1 — Tornado Probability"
+    column_span: 2
     cards:
       - type: picture-entity
         entity: camera.severe_weather_rv_monitor_spc_day_1_tornado_probability
-        name: "Tornado Prob"
+        name: "Tornado Probability"
         show_state: false
         tap_action:
           action: url
           url_path: "https://www.spc.noaa.gov/products/outlook/day1otlk.html"
 
+  # ── Day 1 hail probability (full-width for readability) ───────────────
+  - title: "Day 1 — Hail Probability"
+    column_span: 2
+    cards:
       - type: picture-entity
         entity: camera.severe_weather_rv_monitor_spc_day_1_hail_probability
-        name: "Hail Prob"
+        name: "Hail Probability"
         show_state: false
         tap_action:
           action: url
           url_path: "https://www.spc.noaa.gov/products/outlook/day1otlk.html"
 
-  - type: horizontal-stack
+  # ── Day 1 wind / Day 2 categorical (side by side) ────────────────────
+  - title: "Day 1 — Wind Probability"
+    cards:
+      - type: picture-entity
+        entity: camera.severe_weather_rv_monitor_spc_day_1_wind_probability
+        name: "Wind Probability"
+        show_state: false
+        tap_action:
+          action: url
+          url_path: "https://www.spc.noaa.gov/products/outlook/day1otlk.html"
+
+  - title: "SPC Day 2 Outlook"
     cards:
       - type: picture-entity
         entity: camera.severe_weather_rv_monitor_spc_day_2_categorical_outlook
@@ -275,27 +297,49 @@ cards:
         show_state: false
 
       - type: picture-entity
+        entity: camera.severe_weather_rv_monitor_spc_day_2_tornado_probability
+        name: "Day 2 Tornado Prob"
+        show_state: false
+
+      - type: picture-entity
+        entity: camera.severe_weather_rv_monitor_spc_day_2_hail_probability
+        name: "Day 2 Hail Prob"
+        show_state: false
+
+  # ── SPC Day 3 (full-width) ────────────────────────────────────────────
+  - title: "SPC Day 3 Outlook"
+    column_span: 2
+    cards:
+      - type: picture-entity
         entity: camera.severe_weather_rv_monitor_spc_day_3_categorical_outlook
         name: "Day 3 Categorical"
         show_state: false
 
-  # ── NHC Hurricane maps ────────────────────────────────────────────────
-  - type: markdown
-    content: "## Tropical / Hurricane Outlook"
-
-  - type: horizontal-stack
+  # ── NHC Tropical (full-width) ─────────────────────────────────────────
+  - title: "Tropical / Hurricane Outlook"
+    column_span: 2
     cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook
-        name: "Atlantic 2-Day"
-        show_state: false
-        tap_action:
-          action: url
-          url_path: "https://www.nhc.noaa.gov"
+      - type: horizontal-stack
+        cards:
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook
+            name: "Atlantic 2-Day"
+            show_state: false
+            tap_action:
+              action: url
+              url_path: "https://www.nhc.noaa.gov"
+
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
+            name: "Atlantic 7-Day"
+            show_state: false
+            tap_action:
+              action: url
+              url_path: "https://www.nhc.noaa.gov"
 
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
-        name: "Atlantic 7-Day"
+        entity: camera.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook
+        name: "Eastern Pacific 2-Day"
         show_state: false
         tap_action:
           action: url

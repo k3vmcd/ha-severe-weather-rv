@@ -6,7 +6,7 @@ blueprint:
     threat, or always — your choice. Requires the **Severe Weather RV Monitor**
     integration.
   domain: automation
-  source_url: https://github.com/yourusername/ha-severe-weather-rv/blob/main/blueprints/automation/severe_weather_rv/morning_briefing.yaml
+  source_url: https://github.com/k3vmcd/ha-severe-weather-rv/blob/main/blueprints/automation/severe_weather_rv/morning_briefing.yaml
 
   input:
     notify_target:

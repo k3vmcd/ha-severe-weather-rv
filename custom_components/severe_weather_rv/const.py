@@ -98,19 +98,19 @@ SPC_CAMERAS = [
     {
         "key": "spc_day1_tornado_prob",
         "name": "SPC Day 1 Tornado Probability",
-        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_torn_v2.png"),
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_torn.png"),
         "content_type": "image/png",
     },
     {
         "key": "spc_day1_hail_prob",
         "name": "SPC Day 1 Hail Probability",
-        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_hail_v2.png"),
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_hail.png"),
         "content_type": "image/png",
     },
     {
         "key": "spc_day1_wind_prob",
         "name": "SPC Day 1 Wind Probability",
-        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_wind_v2.png"),
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_wind.png"),
         "content_type": "image/png",
     },
     {
@@ -122,13 +122,13 @@ SPC_CAMERAS = [
     {
         "key": "spc_day2_tornado_prob",
         "name": "SPC Day 2 Tornado Probability",
-        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_torn_v2.png"),
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_torn.png"),
         "content_type": "image/png",
     },
     {
         "key": "spc_day2_hail_prob",
         "name": "SPC Day 2 Hail Probability",
-        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_hail_v2.png"),
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_hail.png"),
         "content_type": "image/png",
     },
     {

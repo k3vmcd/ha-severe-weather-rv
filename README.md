@@ -175,7 +175,7 @@ cards:
       - type: custom:mushroom-template-card
         primary: Tornado
         secondary: "{{ states('sensor.severe_weather_rv_monitor_tornado_threat_level') }}"
-        icon: mdi:tornado
+        icon: mdi:weather-tornado
         fill_container: true
         icon_color: >
           {% set t = states('sensor.severe_weather_rv_monitor_tornado_threat_level') %}

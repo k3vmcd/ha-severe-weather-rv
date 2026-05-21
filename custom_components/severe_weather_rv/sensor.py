@@ -31,7 +31,7 @@ SENSOR_DEFS = [
     (
         "tornado_threat_level",
         "Tornado Threat Level",
-        "mdi:tornado",
+        "mdi:weather-tornado",
         None,
         lambda d: d["tornado_level"],
         lambda d: {},

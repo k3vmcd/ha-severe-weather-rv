@@ -88,6 +88,11 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
             state = self.hass.states.get(entity_id)
             if state is None:
                 raise UpdateFailed(f"GPS entity '{entity_id}' not found")
+            if state.state in ("unknown", "unavailable"):
+                raise UpdateFailed(
+                    f"GPS entity '{entity_id}' is {state.state}; "
+                    "waiting for the sensor to report a valid location"
+                )
             lat = state.attributes.get("latitude")
             lon = state.attributes.get("longitude")
             if lat is None or lon is None:
@@ -104,6 +109,16 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
                 raise UpdateFailed(f"Latitude helper '{lat_id}' not found")
             if lon_state is None:
                 raise UpdateFailed(f"Longitude helper '{lon_id}' not found")
+            if lat_state.state in ("unknown", "unavailable"):
+                raise UpdateFailed(
+                    f"Latitude entity '{lat_id}' is {lat_state.state}; "
+                    "waiting for the sensor to report a valid value"
+                )
+            if lon_state.state in ("unknown", "unavailable"):
+                raise UpdateFailed(
+                    f"Longitude entity '{lon_id}' is {lon_state.state}; "
+                    "waiting for the sensor to report a valid value"
+                )
             try:
                 lat = float(lat_state.state)
                 lon = float(lon_state.state)

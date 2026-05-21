@@ -104,7 +104,10 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             state = self.hass.states.get(entity_id)
             if state is None:
                 errors[CONF_GPS_ENTITY] = "entity_not_found"
-            elif state.attributes.get("latitude") is None:
+            elif (
+                state.state not in ("unknown", "unavailable")
+                and state.attributes.get("latitude") is None
+            ):
                 errors[CONF_GPS_ENTITY] = "no_coordinates"
             else:
                 return self.async_create_entry(
@@ -152,6 +155,23 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             elif lon_state is None:
                 errors[CONF_GPS_LON_ENTITY] = "entity_not_found"
             else:
+                lat_unavailable = lat_state.state in ("unknown", "unavailable")
+                lon_unavailable = lon_state.state in ("unknown", "unavailable")
+                if lat_unavailable or lon_unavailable:
+                    # Allow saving when GPS is temporarily unavailable (e.g. after HA restart).
+                    # The coordinator will retry once the sensor reports a valid value.
+                    return self.async_create_entry(
+                        title="Severe Weather RV Monitor",
+                        data={
+                            CONF_GPS_TYPE: GPS_TYPE_INPUT_NUMBER,
+                            CONF_GPS_LAT_ENTITY: lat_id,
+                            CONF_GPS_LON_ENTITY: lon_id,
+                        },
+                        options={
+                            CONF_ALERT_SCAN_INTERVAL: DEFAULT_ALERT_SCAN_INTERVAL,
+                            CONF_OUTLOOK_SCAN_INTERVAL: DEFAULT_OUTLOOK_SCAN_INTERVAL,
+                        },
+                    )
                 try:
                     float(lat_state.state)
                     float(lon_state.state)

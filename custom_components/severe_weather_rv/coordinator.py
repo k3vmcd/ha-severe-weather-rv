@@ -21,6 +21,7 @@ from .const import (
     CONF_GPS_LON_ENTITY,
     CONF_ALERT_SCAN_INTERVAL,
     DEFAULT_ALERT_SCAN_INTERVAL,
+    GPS_TYPE_HA_HOME,
     GPS_TYPE_DEVICE_TRACKER,
     GPS_TYPE_INPUT_NUMBER,
     SEVERITY_ORDER,
@@ -77,7 +78,12 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
         """Return (lat, lon) from the configured GPS source entity."""
         gps_type = self.entry.data.get(CONF_GPS_TYPE, GPS_TYPE_DEVICE_TRACKER)
 
-        if gps_type == GPS_TYPE_DEVICE_TRACKER:
+        if gps_type == GPS_TYPE_HA_HOME:
+            lat = self.hass.config.latitude
+            lon = self.hass.config.longitude
+            if lat is None or lon is None:
+                raise UpdateFailed("Home Assistant home location is not set")
+        elif gps_type == GPS_TYPE_DEVICE_TRACKER:
             entity_id = self.entry.data[CONF_GPS_ENTITY]
             state = self.hass.states.get(entity_id)
             if state is None:

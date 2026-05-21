@@ -11,6 +11,7 @@ CONF_ALERT_SCAN_INTERVAL = "alert_scan_interval"
 CONF_OUTLOOK_SCAN_INTERVAL = "outlook_scan_interval"
 
 # GPS source types
+GPS_TYPE_HA_HOME = "ha_home"
 GPS_TYPE_DEVICE_TRACKER = "device_tracker"
 GPS_TYPE_INPUT_NUMBER = "input_number"
 

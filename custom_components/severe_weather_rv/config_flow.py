@@ -13,6 +13,7 @@ from .const import (
     CONF_GPS_LON_ENTITY,
     CONF_ALERT_SCAN_INTERVAL,
     CONF_OUTLOOK_SCAN_INTERVAL,
+    GPS_TYPE_HA_HOME,
     GPS_TYPE_DEVICE_TRACKER,
     GPS_TYPE_INPUT_NUMBER,
     DEFAULT_ALERT_SCAN_INTERVAL,
@@ -36,6 +37,8 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Show GPS source type picker."""
         if user_input is not None:
             self._gps_type = user_input[CONF_GPS_TYPE]
+            if self._gps_type == GPS_TYPE_HA_HOME:
+                return await self.async_step_ha_home()
             if self._gps_type == GPS_TYPE_DEVICE_TRACKER:
                 return await self.async_step_device_tracker()
             return await self.async_step_input_numbers()
@@ -44,15 +47,19 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_GPS_TYPE, default=GPS_TYPE_DEVICE_TRACKER): selector.SelectSelector(
+                    vol.Required(CONF_GPS_TYPE, default=GPS_TYPE_HA_HOME): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
+                                {
+                                    "label": "Home Assistant home location (set in HA configuration)",
+                                    "value": GPS_TYPE_HA_HOME,
+                                },
                                 {
                                     "label": "Device Tracker / Person entity (has lat/lon attributes)",
                                     "value": GPS_TYPE_DEVICE_TRACKER,
                                 },
                                 {
-                                    "label": "Two input_number helpers (separate latitude & longitude)",
+                                    "label": "Two sensor/helper entities (separate latitude & longitude)",
                                     "value": GPS_TYPE_INPUT_NUMBER,
                                 },
                             ],
@@ -64,7 +71,28 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------
-    # Step 2a: Device tracker path
+    # Step 2a: HA home location path (no entity selection needed)
+    # ------------------------------------------------------------------
+
+    async def async_step_ha_home(self, user_input: dict | None = None):
+        """Use the Home Assistant home location coordinates directly."""
+        lat = self.hass.config.latitude
+        lon = self.hass.config.longitude
+        if lat is None or lon is None:
+            return self.async_abort(reason="home_location_not_set")
+        return self.async_create_entry(
+            title="Severe Weather RV Monitor",
+            data={
+                CONF_GPS_TYPE: GPS_TYPE_HA_HOME,
+            },
+            options={
+                CONF_ALERT_SCAN_INTERVAL: DEFAULT_ALERT_SCAN_INTERVAL,
+                CONF_OUTLOOK_SCAN_INTERVAL: DEFAULT_OUTLOOK_SCAN_INTERVAL,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Step 2b: Device tracker path
     # ------------------------------------------------------------------
 
     async def async_step_device_tracker(self, user_input: dict | None = None):
@@ -97,7 +125,7 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_GPS_ENTITY): selector.EntitySelector(
                         selector.EntitySelectorConfig(
-                            domain=["device_tracker", "person"]
+                            domain=["device_tracker", "person", "sensor", "zone"]
                         )
                     )
                 }
@@ -106,11 +134,11 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------
-    # Step 2b: Input number pair path
+    # Step 2c: Sensor/helper pair path
     # ------------------------------------------------------------------
 
     async def async_step_input_numbers(self, user_input: dict | None = None):
-        """Pick latitude and longitude input_number helpers."""
+        """Pick latitude and longitude sensor or helper entities."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -147,10 +175,10 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_GPS_LAT_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="input_number")
+                        selector.EntitySelectorConfig(domain=["input_number", "sensor", "number"])
                     ),
                     vol.Required(CONF_GPS_LON_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="input_number")
+                        selector.EntitySelectorConfig(domain=["input_number", "sensor", "number"])
                     ),
                 }
             ),

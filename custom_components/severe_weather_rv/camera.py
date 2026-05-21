@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import (
     DOMAIN,
     SPC_CAMERAS,
-    NWS_USER_AGENT,
+    SPC_IMAGE_USER_AGENT,
     CONF_OUTLOOK_SCAN_INTERVAL,
     DEFAULT_OUTLOOK_SCAN_INTERVAL,
 )
@@ -83,7 +83,12 @@ class SevereWeatherCamera(Camera):
         url = self._cam_def["url"]
         parsed = urlparse(url)
         referer = f"{parsed.scheme}://{parsed.netloc}/"
-        headers = {"User-Agent": NWS_USER_AGENT, "Referer": referer}
+        headers = {
+            "User-Agent": SPC_IMAGE_USER_AGENT,
+            "Referer": referer,
+            "Accept": "image/gif,image/png,image/*,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         timeout = aiohttp.ClientTimeout(total=20)
 
         try:

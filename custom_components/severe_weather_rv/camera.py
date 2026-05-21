@@ -91,16 +91,25 @@ class SevereWeatherCamera(Camera):
         return self._image_cache
 
     async def _fetch_image(self) -> None:
-        """Fetch the remote image, compositing reference layers when available."""
-        reference_urls: list[str] = self._cam_def.get("reference_urls", [])
-        if reference_urls and _PIL_AVAILABLE:
-            await self._fetch_composite_image(reference_urls)
-        else:
-            await self._fetch_simple_image()
+        """Fetch the remote image, compositing all layers when available.
 
-    async def _fetch_simple_image(self) -> None:
+        If ``layer_urls`` is present the images are fetched in order (bottom to top)
+        and composited with PIL.  When PIL is unavailable only the first URL (the
+        complete SPC outlook PNG) is fetched and displayed on its own.
+        For cameras that only define ``url`` (e.g. NHC) a simple single-image fetch
+        is performed regardless of PIL availability.
+        """
+        layer_urls: list[str] = self._cam_def.get("layer_urls", [])
+        if layer_urls:
+            if _PIL_AVAILABLE:
+                await self._fetch_composite_layers(layer_urls)
+            else:
+                await self._fetch_single_url(layer_urls[0])
+        else:
+            await self._fetch_single_url(self._cam_def["url"])
+
+    async def _fetch_single_url(self, url: str) -> None:
         """Fetch a single remote image and update the cache."""
-        url = self._cam_def["url"]
         session = async_get_clientsession(self._hass)
         timeout = aiohttp.ClientTimeout(total=30)
 
@@ -124,56 +133,53 @@ class SevereWeatherCamera(Camera):
         except Exception as exc:  # pylint: disable=broad-except
             _LOGGER.warning("Unexpected error fetching %s: %s", self._cam_def["key"], exc)
 
-    async def _fetch_composite_image(self, reference_urls: list[str]) -> None:
-        """Fetch reference layers and weather layer, then composite into one image.
+    async def _fetch_composite_layers(self, layer_urls: list[str]) -> None:
+        """Fetch all layers in order and composite them bottom-to-top into one PNG.
 
-        Layers are ordered bottom-to-top: reference layers first, weather on top.
+        The first URL is the base/bottom image (e.g. SPC's complete outlook PNG).
+        Subsequent URLs are transparent overlay PNGs (pop centres, interstates, cities).
         Any layer that fails to fetch is silently skipped so the remaining layers
-        still render correctly.
+        still render correctly.  The composite is only stored when the bottom/base
+        layer (index 0) was fetched successfully.
         """
-        weather_url = self._cam_def["url"]
         session = async_get_clientsession(self._hass)
         timeout = aiohttp.ClientTimeout(total=30)
         layer_bytes: list[bytes] = []
+        base_fetched = False
 
-        # Fetch each reference layer (bottom of the composite stack)
-        for ref_url in reference_urls:
+        for idx, url in enumerate(layer_urls):
             try:
-                async with session.get(ref_url, timeout=timeout) as resp:
+                async with session.get(url, timeout=timeout) as resp:
                     if resp.status == 200:
-                        layer_bytes.append(await resp.read())
+                        data = await resp.read()
+                        layer_bytes.append(data)
+                        if idx == 0:
+                            base_fetched = True
+                        _LOGGER.debug(
+                            "Camera %s: fetched layer %d (%d bytes)",
+                            self._cam_def["key"], idx, len(data),
+                        )
                     else:
                         _LOGGER.debug(
-                            "Camera %s: reference layer returned HTTP %s (%s)",
-                            self._cam_def["key"], resp.status, ref_url,
+                            "Camera %s: layer %d returned HTTP %s (%s)",
+                            self._cam_def["key"], idx, resp.status, url,
                         )
             except aiohttp.ClientError as exc:
-                _LOGGER.debug("Network error fetching reference layer %s: %s", ref_url, exc)
+                _LOGGER.debug(
+                    "Camera %s: network error fetching layer %d (%s): %s",
+                    self._cam_def["key"], idx, url, exc,
+                )
             except Exception as exc:  # pylint: disable=broad-except
-                _LOGGER.debug("Unexpected error fetching reference layer %s: %s", ref_url, exc)
+                _LOGGER.debug(
+                    "Camera %s: unexpected error fetching layer %d (%s): %s",
+                    self._cam_def["key"], idx, url, exc,
+                )
 
-        # Fetch the weather polygons layer (top of the composite stack)
-        weather_fetched = False
-        try:
-            async with session.get(weather_url, timeout=timeout) as resp:
-                if resp.status == 200:
-                    layer_bytes.append(await resp.read())
-                    weather_fetched = True
-                    _LOGGER.debug(
-                        "Fetched weather layer %s (%d bytes)",
-                        self._cam_def["key"], len(layer_bytes[-1]),
-                    )
-                else:
-                    _LOGGER.warning(
-                        "Camera %s: HTTP %s from %s",
-                        self._cam_def["key"], resp.status, weather_url,
-                    )
-        except aiohttp.ClientError as exc:
-            _LOGGER.warning("Network error fetching %s: %s", self._cam_def["key"], exc)
-        except Exception as exc:  # pylint: disable=broad-except
-            _LOGGER.warning("Unexpected error fetching %s: %s", self._cam_def["key"], exc)
-
-        if not weather_fetched:
+        if not base_fetched:
+            _LOGGER.warning(
+                "Camera %s: base layer failed to fetch; skipping composite",
+                self._cam_def["key"],
+            )
             return
 
         try:

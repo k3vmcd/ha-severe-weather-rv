@@ -6,7 +6,7 @@ blueprint:
     location. Includes a map image and a tap-through to your severe weather
     dashboard. Requires the **Severe Weather RV Monitor** integration.
   domain: automation
-  source_url: https://github.com/yourusername/ha-severe-weather-rv/blob/main/blueprints/automation/severe_weather_rv/threat_alert.yaml
+  source_url: https://github.com/k3vmcd/ha-severe-weather-rv/blob/main/blueprints/automation/severe_weather_rv/threat_alert.yaml
 
   input:
     notify_target:

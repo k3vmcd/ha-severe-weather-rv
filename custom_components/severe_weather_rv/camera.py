@@ -51,13 +51,9 @@ class SevereWeatherCamera(Camera):
         self._attr_name = cam_def["name"]
         self._attr_unique_id = f"{entry.entry_id}_{cam_def['key']}"
         self._attr_is_streaming = False
-        self._content_type_override = cam_def["content_type"]
+        self._attr_content_type = cam_def["content_type"]
         self._image_cache: bytes | None = None
         self._last_fetch: float = 0.0
-
-    @property
-    def content_type(self) -> str:
-        return self._content_type_override
 
     @property
     def device_info(self) -> dict:

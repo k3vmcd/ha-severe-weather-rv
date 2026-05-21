@@ -64,95 +64,78 @@ HURRICANE_LEVEL_MAP = {
     "Tropical Storm Watch": "TROPICAL STORM WATCH",
 }
 
-# NOAA ArcGIS MapServer export base URL for SPC outlooks.
-# This service is not Cloudflare-protected and is publicly accessible.
-# Layer IDs verified 2026-05 against mapservices.weather.noaa.gov services.
-# transparent=true so the weather polygons can be composited over reference layers.
-_SPC_MAPSERVER_BASE = (
-    "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/"
-    "SPC_wx_outlks/MapServer/export"
-    "?bbox=-126.0,23.0,-66.0,50.5&bboxSR=4326"
-    "&size=1024,630&imageSR=4326&format=png&transparent=true&f=image"
-)
+# Base URL for SPC static outlook PNG images.
+# These are pre-rendered by SPC and update in-place whenever a new outlook is issued,
+# so they are always the latest available image without any timestamp in the URL.
+_SPC_OUTLOOK_BASE = "https://www.spc.noaa.gov/products/outlook"
 
-# NOAA nowcoast reference map layers used as background for SPC cameras.
-# Each URL returns a transparent PNG with its geographic features rendered;
-# they are composited in order (bottom → top) before the weather polygons.
-_NOWCOAST_REF = (
-    "https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/{service}/MapServer/export"
-    "?bbox=-126.0,23.0,-66.0,50.5&bboxSR=4326"
-    "&size=1024,630&imageSR=4326&format=png&transparent=true&f=image"
-)
-NOWCOAST_REFERENCE_URLS = [
-    # State and county boundaries — geographic orientation base
-    _NOWCOAST_REF.format(service="reference_us_stco"),
-    # Population density / populated places overlay
-    _NOWCOAST_REF.format(service="reference_us_pop_places"),
-    # Interstates and major highways
-    _NOWCOAST_REF.format(service="reference_us_intrstates_major_roads_hvywys"),
-    # Major cities and populated place labels
-    _NOWCOAST_REF.format(service="reference_us_cities"),
+# SPC reference overlay images (transparent PNGs composited on top of the outlook image).
+# Layers are applied in order: pop → interstates → cities.
+_SPC_OVERLAY_BASE = f"{_SPC_OUTLOOK_BASE}/imgs_v2"
+_SPC_REFERENCE_OVERLAYS = [
+    f"{_SPC_OVERLAY_BASE}/pop.png",
+    f"{_SPC_OVERLAY_BASE}/interstates.png",
+    f"{_SPC_OVERLAY_BASE}/cities.png",
 ]
 
-# Camera definitions: key, display name, URL, MIME type, suggested refresh (seconds)
-# SPC cameras include reference_urls so the weather layer is composited on top of
-# the standard NWS reference map (state/county borders, population, interstates, cities).
+def _spc_layers(outlook_url: str) -> list[str]:
+    """Return a bottom-to-top layer list for an SPC outlook image."""
+    return [outlook_url, *_SPC_REFERENCE_OVERLAYS]
+
+
+# Camera definitions: key, display name, layer_urls (bottom→top), MIME type.
+# SPC cameras use ``layer_urls`` so the outlook image is composited below the
+# reference overlays (pop centres, interstates, city labels).  When PIL is not
+# available the first entry — the complete SPC outlook PNG — is shown on its own.
+# NHC cameras use ``url`` only (no compositing needed).
 SPC_CAMERAS = [
     {
         "key": "spc_day1_categorical",
         "name": "SPC Day 1 Categorical Outlook",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:1",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1otlk.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day1_tornado_prob",
         "name": "SPC Day 1 Tornado Probability",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:3",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_torn_v2.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day1_hail_prob",
         "name": "SPC Day 1 Hail Probability",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:5",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_hail_v2.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day1_wind_prob",
         "name": "SPC Day 1 Wind Probability",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:7",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day1probotlk_wind_v2.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day2_categorical",
         "name": "SPC Day 2 Categorical Outlook",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:9",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2otlk.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day2_tornado_prob",
         "name": "SPC Day 2 Tornado Probability",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:11",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_torn_v2.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day2_hail_prob",
         "name": "SPC Day 2 Hail Probability",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:13",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_hail_v2.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "spc_day3_categorical",
         "name": "SPC Day 3 Categorical Outlook",
-        "url": _SPC_MAPSERVER_BASE + "&layers=show:17",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day3otlk.png"),
         "content_type": "image/png",
-        "reference_urls": NOWCOAST_REFERENCE_URLS,
     },
     {
         "key": "nhc_atlantic_2day",

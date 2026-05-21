@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -80,7 +81,9 @@ class SevereWeatherCamera(Camera):
     async def _fetch_image(self) -> None:
         """Fetch the remote image and update the cache."""
         url = self._cam_def["url"]
-        headers = {"User-Agent": NWS_USER_AGENT}
+        parsed = urlparse(url)
+        referer = f"{parsed.scheme}://{parsed.netloc}/"
+        headers = {"User-Agent": NWS_USER_AGENT, "Referer": referer}
         timeout = aiohttp.ClientTimeout(total=20)
 
         try:

@@ -69,7 +69,7 @@ SPC_CAMERAS = [
     {
         "key": "spc_day1_categorical",
         "name": "SPC Day 1 Categorical Outlook",
-        "url": "https://www.spc.noaa.gov/products/outlook/day1otlk_1200.gif",
+        "url": "https://www.spc.noaa.gov/products/outlook/day1otlk.gif",
         "content_type": "image/gif",
     },
     {
@@ -93,7 +93,7 @@ SPC_CAMERAS = [
     {
         "key": "spc_day2_categorical",
         "name": "SPC Day 2 Categorical Outlook",
-        "url": "https://www.spc.noaa.gov/products/outlook/day2otlk_1730.gif",
+        "url": "https://www.spc.noaa.gov/products/outlook/day2otlk.gif",
         "content_type": "image/gif",
     },
     {

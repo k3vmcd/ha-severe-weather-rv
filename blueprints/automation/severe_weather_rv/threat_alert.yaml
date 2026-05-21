@@ -1,0 +1,88 @@
+blueprint:
+  name: "Severe Weather RV — Threat Alert Notification"
+  description: >
+    Sends a rich mobile notification when a severe weather threat (tornado,
+    severe thunderstorm, or hurricane) becomes active at your RV's current
+    location. Includes a map image and a tap-through to your severe weather
+    dashboard. Requires the **Severe Weather RV Monitor** integration.
+  domain: automation
+  source_url: https://github.com/yourusername/ha-severe-weather-rv/blob/main/blueprints/automation/severe_weather_rv/threat_alert.yaml
+
+  input:
+    notify_target:
+      name: Notification Target
+      description: >
+        The notify service to call (e.g. `notify.mobile_app_your_phone`).
+        Use a notify group to reach multiple devices.
+      selector:
+        text: {}
+
+    dashboard_path:
+      name: Dashboard Path
+      description: >
+        Lovelace path to open when the notification is tapped.
+        Example: `/lovelace/severe-weather`
+      default: "/lovelace/severe-weather"
+      selector:
+        text: {}
+
+    critical_ios:
+      name: iOS Critical Alert for Warnings
+      description: >
+        Send as a Critical Alert (bypasses silent/DND) when a tornado or
+        hurricane WARNING (not just watch) is active. Requires iOS notification
+        permission for Critical Alerts.
+      default: true
+      selector:
+        boolean: {}
+
+trigger:
+  - platform: state
+    entity_id: binary_sensor.severe_weather_rv_monitor_active_severe_weather_threat
+    to: "on"
+
+  - platform: state
+    entity_id: sensor.severe_weather_rv_monitor_severe_weather_summary
+    not_to:
+      - "ALL CLEAR"
+      - unavailable
+      - unknown
+
+condition:
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.severe_weather_rv_monitor_severe_weather_summary
+        state: "ALL CLEAR"
+
+action:
+  - variables:
+      summary: "{{ states('sensor.severe_weather_rv_monitor_severe_weather_summary') }}"
+      headline: "{{ states('sensor.severe_weather_rv_monitor_top_alert_headline') }}"
+      is_warning: >
+        {{ states('sensor.severe_weather_rv_monitor_tornado_threat_level') in ['WARNING','EMERGENCY']
+           or states('sensor.severe_weather_rv_monitor_hurricane_threat_level') in ['WARNING','EMERGENCY'] }}
+
+  - service: !input notify_target
+    data:
+      title: >
+        ⚠️ {{ summary }}
+      message: >
+        {{ headline }}
+      data:
+        image: "/api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook"
+        url: !input dashboard_path
+        clickAction: !input dashboard_path
+        tag: "severe_weather_rv_threat"
+        channel: "severe_weather"
+        importance: high
+        # iOS critical alert (warning/emergency only, if enabled)
+        push:
+          sound:
+            name: default
+            critical: >
+              {{ 1 if (is_warning and (blueprint.input.critical_ios | default(true))) else 0 }}
+            volume: 1.0
+
+mode: single
+max_exceeded: silent

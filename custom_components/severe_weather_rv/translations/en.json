@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GPS Source Type",
+        "description": "How does Home Assistant receive your RV's GPS coordinates?",
+        "data": {
+          "gps_type": "GPS Source"
+        }
+      },
+      "device_tracker": {
+        "title": "Select GPS Entity",
+        "description": "Choose the device_tracker or person entity that tracks your RV. It must have latitude and longitude attributes.",
+        "data": {
+          "gps_entity": "GPS Entity"
+        }
+      },
+      "input_numbers": {
+        "title": "Select Coordinate Helpers",
+        "description": "Choose the two input_number helpers that store your RV's latitude and longitude.",
+        "data": {
+          "gps_lat_entity": "Latitude Helper",
+          "gps_lon_entity": "Longitude Helper"
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found in Home Assistant",
+      "no_coordinates": "This entity does not have latitude/longitude attributes",
+      "invalid_coordinates": "Helpers contain non-numeric values"
+    },
+    "abort": {
+      "already_configured": "Severe Weather RV Monitor is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Update Settings",
+        "description": "Adjust how frequently weather data is refreshed.",
+        "data": {
+          "alert_scan_interval": "Alert poll interval (seconds)",
+          "outlook_scan_interval": "Outlook map refresh interval (seconds)"
+        }
+      }
+    }
+  }
+}

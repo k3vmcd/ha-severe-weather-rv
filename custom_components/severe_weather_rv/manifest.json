@@ -1,0 +1,13 @@
+{
+  "domain": "severe_weather_rv",
+  "name": "Severe Weather RV Monitor",
+  "version": "1.1.0",
+  "documentation": "https://github.com/yourusername/ha-severe-weather-rv",
+  "issue_tracker": "https://github.com/yourusername/ha-severe-weather-rv/issues",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": [],
+  "iot_class": "cloud_polling",
+  "config_flow": true,
+  "homeassistant": "2023.1.0"
+}

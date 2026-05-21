@@ -1,0 +1,84 @@
+blueprint:
+  name: "Severe Weather RV — Morning Outlook Briefing"
+  description: >
+    Sends a daily morning notification with the SPC Day 1 convective outlook
+    image and your current threat status. Only sends if there is an elevated
+    threat, or always — your choice. Requires the **Severe Weather RV Monitor**
+    integration.
+  domain: automation
+  source_url: https://github.com/yourusername/ha-severe-weather-rv/blob/main/blueprints/automation/severe_weather_rv/morning_briefing.yaml
+
+  input:
+    notify_target:
+      name: Notification Target
+      description: >
+        The notify service to call (e.g. `notify.mobile_app_your_phone` or
+        a notify group).
+      selector:
+        text: {}
+
+    briefing_time:
+      name: Briefing Time
+      description: Time to send the daily outlook notification.
+      default: "07:30:00"
+      selector:
+        time: {}
+
+    only_when_elevated:
+      name: Only Send When Threat is Elevated
+      description: >
+        When enabled, the briefing is only sent when the summary is not
+        "ALL CLEAR" (i.e. there is some active risk). Disable to always
+        receive a daily briefing.
+      default: false
+      selector:
+        boolean: {}
+
+    dashboard_path:
+      name: Dashboard Path
+      description: Lovelace path to open on tap.
+      default: "/lovelace/severe-weather"
+      selector:
+        text: {}
+
+trigger:
+  - platform: time
+    at: !input briefing_time
+
+condition:
+  - condition: or
+    conditions:
+      # Always send if only_when_elevated is false
+      - condition: template
+        value_template: "{{ not (blueprint.input.only_when_elevated | default(false)) }}"
+      # Or send when there's an active risk
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: sensor.severe_weather_rv_monitor_severe_weather_summary
+            state: "ALL CLEAR"
+
+action:
+  - variables:
+      summary: "{{ states('sensor.severe_weather_rv_monitor_severe_weather_summary') }}"
+      tornado: "{{ states('sensor.severe_weather_rv_monitor_tornado_threat_level') }}"
+      tstorm: "{{ states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') }}"
+      hurricane: "{{ states('sensor.severe_weather_rv_monitor_hurricane_threat_level') }}"
+      alert_count: "{{ states('sensor.severe_weather_rv_monitor_alert_count') }}"
+
+  - service: !input notify_target
+    data:
+      title: >
+        🌩️ Daily Severe Weather Outlook — {{ summary }}
+      message: >
+        Tornado: {{ tornado }} | Tstorm: {{ tstorm }} | Hurricane: {{ hurricane }}
+        {{ '\n' ~ alert_count ~ ' active NWS alert(s) for your location.' if alert_count | int(0) > 0 else '' }}
+        Tap to view SPC maps and full alert details.
+      data:
+        image: "/api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook"
+        url: !input dashboard_path
+        clickAction: !input dashboard_path
+        tag: "severe_weather_rv_briefing"
+        channel: "severe_weather_briefing"
+
+mode: single

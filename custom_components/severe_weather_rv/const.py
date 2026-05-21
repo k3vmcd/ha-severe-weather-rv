@@ -23,11 +23,6 @@ DEFAULT_OUTLOOK_SCAN_INTERVAL = 3600  # 1 hour
 NWS_ALERTS_URL = "https://api.weather.gov/alerts/active"
 NHC_STORMS_URL = "https://www.nhc.noaa.gov/CurrentStorms.json"
 NWS_USER_AGENT = "(severe_weather_rv Home Assistant integration)"
-SPC_IMAGE_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
 
 # Ordered highest → lowest severity
 SEVERITY_ORDER = ["Extreme", "Severe", "Moderate", "Minor", "Unknown"]
@@ -69,55 +64,65 @@ HURRICANE_LEVEL_MAP = {
     "Tropical Storm Watch": "TROPICAL STORM WATCH",
 }
 
+# NOAA ArcGIS MapServer export base URL for SPC outlooks.
+# This service is not Cloudflare-protected and is publicly accessible.
+# Layer IDs verified 2026-05 against mapservices.weather.noaa.gov services.
+_SPC_MAPSERVER_BASE = (
+    "https://mapservices.weather.noaa.gov/vector/rest/services/outlooks/"
+    "SPC_wx_outlks/MapServer/export"
+    "?bbox=-126.0,23.0,-66.0,50.5&bboxSR=4326"
+    "&size=1024,630&imageSR=4326&format=png&transparent=false&f=image"
+)
+
 # Camera definitions: key, display name, URL, MIME type, suggested refresh (seconds)
 SPC_CAMERAS = [
     {
         "key": "spc_day1_categorical",
         "name": "SPC Day 1 Categorical Outlook",
-        "url": "https://www.spc.noaa.gov/products/outlook/day1otlk.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:1",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day1_tornado_prob",
         "name": "SPC Day 1 Tornado Probability",
-        "url": "https://www.spc.noaa.gov/products/outlook/day1probotlk_torn.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:3",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day1_hail_prob",
         "name": "SPC Day 1 Hail Probability",
-        "url": "https://www.spc.noaa.gov/products/outlook/day1probotlk_hail.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:5",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day1_wind_prob",
         "name": "SPC Day 1 Wind Probability",
-        "url": "https://www.spc.noaa.gov/products/outlook/day1probotlk_wind.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:7",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day2_categorical",
         "name": "SPC Day 2 Categorical Outlook",
-        "url": "https://www.spc.noaa.gov/products/outlook/day2otlk.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:9",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day2_tornado_prob",
         "name": "SPC Day 2 Tornado Probability",
-        "url": "https://www.spc.noaa.gov/products/outlook/day2probotlk_torn.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:11",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day2_hail_prob",
         "name": "SPC Day 2 Hail Probability",
-        "url": "https://www.spc.noaa.gov/products/outlook/day2probotlk_hail.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:13",
+        "content_type": "image/png",
     },
     {
         "key": "spc_day3_categorical",
         "name": "SPC Day 3 Categorical Outlook",
-        "url": "https://www.spc.noaa.gov/products/outlook/day3otlk.gif",
-        "content_type": "image/gif",
+        "url": _SPC_MAPSERVER_BASE + "&layers=show:17",
+        "content_type": "image/png",
     },
     {
         "key": "nhc_atlantic_2day",

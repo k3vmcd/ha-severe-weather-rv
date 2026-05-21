@@ -3,19 +3,18 @@ from __future__ import annotations
 
 import logging
 import time
-from urllib.parse import urlparse
 
 import aiohttp
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
     SPC_CAMERAS,
-    SPC_IMAGE_USER_AGENT,
     CONF_OUTLOOK_SCAN_INTERVAL,
     DEFAULT_OUTLOOK_SCAN_INTERVAL,
 )
@@ -31,7 +30,7 @@ async def async_setup_entry(
     """Create a camera entity for each SPC/NHC map."""
     scan_interval = entry.options.get(CONF_OUTLOOK_SCAN_INTERVAL, DEFAULT_OUTLOOK_SCAN_INTERVAL)
     async_add_entities(
-        SevereWeatherCamera(entry, cam_def, scan_interval)
+        SevereWeatherCamera(hass, entry, cam_def, scan_interval)
         for cam_def in SPC_CAMERAS
     )
 
@@ -41,11 +40,13 @@ class SevereWeatherCamera(Camera):
 
     def __init__(
         self,
+        hass: HomeAssistant,
         entry: ConfigEntry,
         cam_def: dict,
         scan_interval: int,
     ) -> None:
         super().__init__()
+        self._hass = hass
         self._entry = entry
         self._cam_def = cam_def
         self._scan_interval = scan_interval
@@ -81,32 +82,24 @@ class SevereWeatherCamera(Camera):
     async def _fetch_image(self) -> None:
         """Fetch the remote image and update the cache."""
         url = self._cam_def["url"]
-        parsed = urlparse(url)
-        referer = f"{parsed.scheme}://{parsed.netloc}/"
-        headers = {
-            "User-Agent": SPC_IMAGE_USER_AGENT,
-            "Referer": referer,
-            "Accept": "image/gif,image/png,image/*,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        timeout = aiohttp.ClientTimeout(total=20)
+        session = async_get_clientsession(self._hass)
+        timeout = aiohttp.ClientTimeout(total=30)
 
         try:
-            async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        self._image_cache = await resp.read()
-                        self._last_fetch = time.monotonic()
-                        _LOGGER.debug(
-                            "Fetched %s (%d bytes)", self._cam_def["key"], len(self._image_cache)
-                        )
-                    else:
-                        _LOGGER.warning(
-                            "Camera %s: HTTP %s from %s",
-                            self._cam_def["key"],
-                            resp.status,
-                            url,
-                        )
+            async with session.get(url, timeout=timeout) as resp:
+                if resp.status == 200:
+                    self._image_cache = await resp.read()
+                    self._last_fetch = time.monotonic()
+                    _LOGGER.debug(
+                        "Fetched %s (%d bytes)", self._cam_def["key"], len(self._image_cache)
+                    )
+                else:
+                    _LOGGER.warning(
+                        "Camera %s: HTTP %s from %s",
+                        self._cam_def["key"],
+                        resp.status,
+                        url,
+                    )
         except aiohttp.ClientError as exc:
             _LOGGER.warning("Network error fetching %s: %s", self._cam_def["key"], exc)
         except Exception as exc:  # pylint: disable=broad-except

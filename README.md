@@ -98,6 +98,22 @@ Sends a daily summary at your chosen time with current threat levels and the Day
 
 ---
 
+## Example Automations (Non-Blueprint)
+
+Blueprints are great for a one-click UI import, but once an automation is created *from* a blueprint, Home Assistant's editor only exposes the blueprint's declared `input:` fields — you can't touch the underlying triggers/conditions/actions without unlinking it. If you want full control to keep customizing an automation over time, use the plain YAML examples in [`automations/`](automations/) instead:
+
+- Copy the file's contents into an automation (UI **Edit in YAML** on a new automation, or your `automations.yaml`)
+- Replace the `notify.*` targets and any hardcoded entity IDs with your own
+- Edit triggers/conditions/actions freely — there's no blueprint link to break
+
+| File | What it does |
+|------|---------------|
+| [`automations/severe_weather_alerts.yaml`](automations/severe_weather_alerts.yaml) | Combines SPC Day 1/2 hail risk changes with tornado/hurricane threat-level changes into one automation, with per-hazard images, new-vs-changed wording, and iOS critical alerts on WARNING/EMERGENCY. Notifies two phone groups. |
+
+This doesn't replace the Threat Alert / SPC Risk Area blueprints — those still cover moderate/high-risk-area entry, wind-risk escalation, and storm proximity, which this example doesn't. Use whichever mechanism fits: blueprints for quick setup or sharing with other users, raw automations when you want to keep hand-tuning the logic.
+
+---
+
 ## Entities Created
 
 ### Sensors (36 total)

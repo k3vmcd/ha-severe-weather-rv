@@ -1,0 +1,99 @@
+# Plain (non-blueprint) automation — copy into automations.yaml and edit freely.
+# Unlike the blueprints/ directory, this is not imported via the UI as a linked
+# blueprint, so every trigger/condition/action stays fully editable afterward.
+# Replace notify.GROUP_1 / notify.GROUP_2 with your own notify
+# targets or groups before use.
+alias: Severe Weather RV - Hail, Tornado, Hurricane Alerts
+description: >-
+  Notifies two phone groups when SPC Day 1/2 hail risk goes above 0% or changes,
+  and when tornado or hurricane threat level becomes active or changes.
+triggers:
+  - entity_id: sensor.severe_weather_rv_monitor_spc_day_1_hail_risk
+    id: hail_day1
+    trigger: state
+  - entity_id: sensor.severe_weather_rv_monitor_spc_day_2_hail_risk
+    id: hail_day2
+    trigger: state
+  - entity_id: sensor.severe_weather_rv_monitor_tornado_threat_level
+    id: tornado
+    trigger: state
+  - entity_id: sensor.severe_weather_rv_monitor_hurricane_threat_level
+    id: hurricane
+    trigger: state
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (((trigger.to_state.state | string).replace('%', '') | float(-1)) > 0)
+      if trigger.id in ['hail_day1', 'hail_day2'] else (trigger.to_state.state
+      not in ['NONE', 'unknown', 'unavailable', none]) }}
+actions:
+  - variables:
+      to: '{{ (trigger.to_state.state | string).replace(''%'', '''') }}'
+      from: >-
+        {{ ((trigger.from_state.state | string).replace('%', '')) if
+        trigger.from_state is not none else 'unknown' }}
+      is_new: '{{ from in [''0'', ''NONE'', ''unknown'', ''unavailable'', ''none'', ''''] }}'
+      is_critical: >-
+        {{ 1 if (trigger.id in ['tornado', 'hurricane'] and to in ['WARNING',
+        'EMERGENCY']) else 0 }}
+      alert_title: >-
+        {% if trigger.id == 'hail_day1' %} 🧊 Hail Risk – Day 1: {{ to }}% {%
+        elif trigger.id == 'hail_day2' %} 🧊 Hail Risk – Day 2: {{ to }}% {%
+        elif trigger.id == 'tornado' %} 🌪️ Tornado Threat: {{ to }} {% else %}
+        🌀 Hurricane Threat: {{ to }} {% endif %}
+      alert_message: >-
+        {% if trigger.id in ['hail_day1', 'hail_day2'] %} {% set day_label =
+        'Day 1' if trigger.id == 'hail_day1' else 'Day 2' %} {{ 'New hail risk
+        detected: ' ~ to ~ '% (' ~ day_label ~ ' outlook) at your RV location.'
+        if is_new else 'Hail risk (' ~ day_label ~ ') changed from ' ~ from ~ '%
+        to ' ~ to ~ '% at your RV location.' }} {% else %} {% set kind =
+        'Tornado' if trigger.id == 'tornado' else 'Hurricane' %} {{ kind ~ '
+        threat is now ' ~ to ~ ' at your RV location.' if is_new else kind ~ '
+        threat changed from ' ~ from ~ ' to ' ~ to ~ ' at your RV location.' }}
+        {% endif %}
+      alert_image: >-
+        {% if trigger.id == 'hail_day1' %}
+        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_hail_probability
+        {% elif trigger.id == 'hail_day2' %}
+        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_2_hail_probability
+        {% elif trigger.id == 'tornado' %}
+        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_tornado_probability
+        {% else %}
+        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
+        {% endif %}
+      alert_tag: severe_weather_{{ trigger.id }}
+  - data:
+      title: '{{ alert_title | trim }}'
+      message: '{{ alert_message | trim }}'
+      data:
+        image: '{{ alert_image | trim }}'
+        url: /lovelace/severe-weather
+        clickAction: /lovelace/severe-weather
+        tag: '{{ alert_tag }}'
+        channel: severe_weather
+        importance: high
+        push:
+          sound:
+            name: default
+            critical: '{{ is_critical }}'
+            volume: 1
+    action: notify.GROUP_1
+  - data:
+      title: '{{ alert_title | trim }}'
+      message: '{{ alert_message | trim }}'
+      data:
+        image: '{{ alert_image | trim }}'
+        url: /lovelace/severe-weather
+        clickAction: /lovelace/severe-weather
+        tag: '{{ alert_tag }}'
+        channel: severe_weather
+        importance: high
+        push:
+          sound:
+            name: default
+            critical: '{{ is_critical }}'
+            volume: 1
+    action: notify.GROUP_2
+    enabled: true
+mode: queued
+max: 10

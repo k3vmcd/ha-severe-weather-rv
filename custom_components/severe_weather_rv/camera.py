@@ -7,6 +7,7 @@ import io
 import logging
 import time
 from collections import OrderedDict
+from datetime import timedelta
 
 import aiohttp
 
@@ -16,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     DOMAIN,
@@ -49,8 +51,8 @@ except ImportError:  # pragma: no cover
     )
 
 
-# Bound on how long integration setup waits for the initial SPC map fetch —
-# prevents a slow/unreachable SPC server from hanging entity registration.
+# Bound on how long integration setup waits for the initial map fetch —
+# prevents a slow/unreachable server from hanging entity registration.
 _PREWARM_TIMEOUT = 25
 
 
@@ -68,27 +70,34 @@ async def async_setup_entry(
     ]
     entities.append(RadarCamera(hass, entry, coordinator, scan_interval))
 
-    # Warm the SPC map cache *before* entities are exposed to the frontend, so
-    # the very first dashboard view is never the one blocking on a live fetch
-    # (and never risks HA's ~10s camera-image timeout / a broken-image flash).
-    async def _prewarm_bounded(cam: "SevereWeatherCamera") -> None:
+    # Warm every camera's cache *before* entities are exposed to the frontend,
+    # so the very first dashboard view is never the one blocking on a live
+    # fetch (and never risks HA's ~10s camera-image timeout).
+    async def _prewarm_bounded(cam) -> None:
         try:
             await asyncio.wait_for(cam.async_prewarm(), timeout=_PREWARM_TIMEOUT)
         except asyncio.TimeoutError:
             _LOGGER.warning(
-                "Timed out warming SPC map cache for %s; will retry in the background",
-                cam._cam_def["key"],
+                "Timed out warming the map cache for %s; will retry in the background",
+                getattr(cam, "_attr_unique_id", cam),
             )
 
-    await asyncio.gather(
-        *(
-            _prewarm_bounded(cam)
-            for cam in entities
-            if isinstance(cam, SevereWeatherCamera) and cam.is_spc_camera
-        )
-    )
+    await asyncio.gather(*(_prewarm_bounded(cam) for cam in entities))
 
     async_add_entities(entities)
+
+    # Background fallback refresh — entirely decoupled from dashboard/viewer
+    # traffic, so cameras stay fresh even if nobody ever opens the dashboard.
+    # SPC cameras are additionally kept in step with the real SPC issuance
+    # schedule and risk-sensor updates (see __init__.py / coordinator.py).
+    async def _periodic_refresh(_now) -> None:
+        await asyncio.gather(*(cam.async_prewarm() for cam in entities))
+
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass, _periodic_refresh, timedelta(seconds=scan_interval)
+        )
+    )
 
 
 class SevereWeatherCamera(Camera):
@@ -157,17 +166,16 @@ class SevereWeatherCamera(Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        """Return the latest cached image, refreshing if stale."""
-        now = time.monotonic()
-        age = now - self._last_fetch
+        """Return the cached image — never blocks a viewer on a live fetch.
 
-        if self._image_cache is None:
-            await self._fetch_image()
-        elif age >= self._scan_interval and not self._refresh_inflight:
-            # Serve cached image immediately; refresh in background.
+        Freshness is handled entirely out-of-band: startup prewarm, the
+        periodic fallback timer, and the SPC issuance-schedule/dispatcher
+        signal (see async_setup_entry / coordinator.py) keep the cache
+        current regardless of whether anyone is viewing the dashboard.
+        """
+        if self._image_cache is None and not self._refresh_inflight:
             self._refresh_inflight = True
             self._hass.async_create_task(self._async_refresh_image())
-
         return self._image_cache
 
     async def _async_refresh_image(self) -> None:
@@ -443,6 +451,7 @@ class RadarCamera(Camera):
         self._attr_content_type = "image/png"
         self._image_cache: bytes | None = None
         self._last_fetch: float = 0.0
+        self._refresh_inflight = False
 
     @property
     def device_info(self) -> dict:
@@ -459,13 +468,26 @@ class RadarCamera(Camera):
         station = (self._coordinator.data or {}).get("radar_station")
         return {"radar_station": station or "Unknown"}
 
+    async def async_prewarm(self) -> None:
+        """Fetch the image immediately, without waiting for a viewer or timer tick."""
+        if self._refresh_inflight:
+            return
+        self._refresh_inflight = True
+        try:
+            await self._fetch_image()
+        finally:
+            self._refresh_inflight = False
+
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        """Return the latest radar image, refreshing when stale."""
-        now = time.monotonic()
-        if self._image_cache is None or (now - self._last_fetch) >= self._scan_interval:
-            await self._fetch_image()
+        """Return the cached radar tile — never blocks a viewer on a live fetch.
+
+        Freshness is handled entirely out-of-band by the periodic fallback
+        timer registered in async_setup_entry.
+        """
+        if self._image_cache is None and not self._refresh_inflight:
+            self._hass.async_create_task(self.async_prewarm())
         return self._image_cache
 
     async def _fetch_image(self) -> None:

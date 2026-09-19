@@ -1,7 +1,7 @@
 {
   "domain": "severe_weather_rv",
   "name": "Severe Weather RV Monitor",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "documentation": "https://github.com/k3vmcd/ha-severe-weather-rv",
   "issue_tracker": "https://github.com/k3vmcd/ha-severe-weather-rv/issues",
   "dependencies": [],

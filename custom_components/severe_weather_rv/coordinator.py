@@ -11,6 +11,7 @@ import aiohttp
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -43,6 +44,7 @@ from .const import (
     STORM_PROXIMITY_FAR_MILES,
     LOCATION_CHANGE_THRESHOLD,
     MAX_FORECAST_PERIODS,
+    SIGNAL_SPC_DATA_UPDATED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -608,6 +610,23 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
         # Refreshed every CONF_FORECAST_SCAN_INTERVAL seconds.
         self._last_forecast_fetch: float = 0.0
         self._cached_extended: dict = {}
+        # Set by the SPC issuance-schedule tracker to force an immediate
+        # slow-tier refresh, independent of the forecast_scan_interval gate.
+        self._force_extended_refresh: bool = False
+
+    # ------------------------------------------------------------------
+    # Forced refresh — called by the SPC issuance-schedule tracker
+    # ------------------------------------------------------------------
+
+    async def async_force_refresh(self) -> None:
+        """Force an immediate full refresh, including slow-tier SPC data.
+
+        Used by the SPC convective-outlook issuance schedule so risk sensors
+        and map cameras update as soon as SPC publishes new data, rather than
+        waiting for the next forecast_scan_interval tick.
+        """
+        self._force_extended_refresh = True
+        await self.async_request_refresh()
 
     # ------------------------------------------------------------------
     # Coordinate resolution
@@ -1196,6 +1215,7 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
 
         headers = {"User-Agent": NWS_USER_AGENT, "Accept": "application/geo+json"}
         timeout = aiohttp.ClientTimeout(total=15)
+        slow_tier_updated = False
 
         async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
 
@@ -1245,7 +1265,9 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
                 CONF_FORECAST_SCAN_INTERVAL, DEFAULT_FORECAST_SCAN_INTERVAL
             )
             now = time.monotonic()
-            if now - self._last_forecast_fetch >= forecast_interval:
+            slow_tier_updated = False
+            if self._force_extended_refresh or now - self._last_forecast_fetch >= forecast_interval:
+                self._force_extended_refresh = False
                 extended: dict = {}
                 extended.update(await self._fetch_nws_forecast(session))
                 extended.update(await self._fetch_nws_observations(session))
@@ -1254,6 +1276,7 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
                 self._cached_extended = extended
                 self._last_forecast_fetch = now
                 data.update(extended)
+                slow_tier_updated = True
 
         # ── Derive threat levels from active alert events ─────────────────
         active_events = {a["event"] for a in data["all_alerts"]}
@@ -1315,5 +1338,11 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
 
         # ── DIKA action level (computed last — uses all derived fields) ────
         data.update(_compute_action_level(data))
+
+        # ── Notify SPC map cameras so they refresh in step with risk sensors ──
+        if slow_tier_updated:
+            async_dispatcher_send(
+                self.hass, f"{SIGNAL_SPC_DATA_UPDATED}_{self.entry.entry_id}"
+            )
 
         return data

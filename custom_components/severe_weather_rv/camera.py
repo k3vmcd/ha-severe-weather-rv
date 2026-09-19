@@ -14,6 +14,7 @@ from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -21,6 +22,7 @@ from .const import (
     SPC_CAMERAS,
     CONF_OUTLOOK_SCAN_INTERVAL,
     DEFAULT_OUTLOOK_SCAN_INTERVAL,
+    SIGNAL_SPC_DATA_UPDATED,
 )
 from .coordinator import SevereWeatherCoordinator
 
@@ -62,6 +64,12 @@ async def async_setup_entry(
     entities.append(RadarCamera(hass, entry, coordinator, scan_interval))
     async_add_entities(entities)
 
+    # Warm the SPC map cache immediately on setup/reload so the first dashboard
+    # view isn't slow — don't wait for a viewer or the next schedule tick.
+    for cam in entities:
+        if isinstance(cam, SevereWeatherCamera) and cam.is_spc_camera:
+            hass.async_create_task(cam.async_prewarm())
+
 
 class SevereWeatherCamera(Camera):
     """Camera entity that fetches and caches remote weather map images."""
@@ -98,6 +106,33 @@ class SevereWeatherCamera(Camera):
             "model": "Dynamic GPS-Based Weather Monitor",
             "entry_type": "service",
         }
+
+    @property
+    def is_spc_camera(self) -> bool:
+        """Return True for SPC outlook cameras (as opposed to NHC/radar)."""
+        return self._cam_def["key"].startswith("spc_")
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to SPC risk-data updates so maps refresh in step with sensors."""
+        await super().async_added_to_hass()
+        if self.is_spc_camera:
+            signal = f"{SIGNAL_SPC_DATA_UPDATED}_{self._entry.entry_id}"
+            self.async_on_remove(
+                async_dispatcher_connect(self._hass, signal, self._handle_spc_data_updated)
+            )
+
+    def _handle_spc_data_updated(self) -> None:
+        """Handle a dispatcher signal that new SPC risk data is available."""
+        if not self._refresh_inflight:
+            self._refresh_inflight = True
+            self._hass.async_create_task(self._async_refresh_image())
+
+    async def async_prewarm(self) -> None:
+        """Fetch the image immediately, without waiting for a viewer or schedule tick."""
+        if self._refresh_inflight:
+            return
+        self._refresh_inflight = True
+        await self._async_refresh_image()
 
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None

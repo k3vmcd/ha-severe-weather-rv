@@ -5,13 +5,20 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_track_utc_time_change
 
-from .const import DOMAIN
+from .const import DOMAIN, SPC_OUTLOOK_SCHEDULE_UTC, SPC_FETCH_DELAY_MINUTES
 from .coordinator import SevereWeatherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "binary_sensor", "camera"]
+
+
+def _buffered_time(hour: int, minute: int, delay_minutes: int) -> tuple[int, int]:
+    """Add a delay (minutes) to an (hour, minute) UTC time, wrapping at 24h."""
+    total = (hour * 60 + minute + delay_minutes) % (24 * 60)
+    return total // 60, total % 60
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -27,6 +34,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Reload the entry if options change (updates scan interval etc.)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    # Force a full refresh (risk sensors + SPC map cameras) shortly after each
+    # known SPC convective-outlook issuance time, instead of waiting for the
+    # next forecast_scan_interval poll.
+    async def _scheduled_spc_refresh(_now) -> None:
+        await coordinator.async_force_refresh()
+
+    for hour, minute in SPC_OUTLOOK_SCHEDULE_UTC:
+        b_hour, b_minute = _buffered_time(hour, minute, SPC_FETCH_DELAY_MINUTES)
+        entry.async_on_unload(
+            async_track_utc_time_change(
+                hass, _scheduled_spc_refresh, hour=b_hour, minute=b_minute, second=0
+            )
+        )
 
     return True
 

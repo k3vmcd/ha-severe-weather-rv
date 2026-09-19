@@ -137,6 +137,12 @@ SPC_CAMERAS = [
         "content_type": "image/png",
     },
     {
+        "key": "spc_day2_wind_prob",
+        "name": "SPC Day 2 Wind Probability",
+        "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day2probotlk_wind.png"),
+        "content_type": "image/png",
+    },
+    {
         "key": "spc_day3_categorical",
         "name": "SPC Day 3 Categorical Outlook",
         "layer_urls": _spc_layers(f"{_SPC_OUTLOOK_BASE}/day3otlk.png"),
@@ -206,3 +212,34 @@ LOCATION_CHANGE_THRESHOLD: float = 0.1
 
 # Maximum forecast periods to store (14 = 7 day/night pairs)
 MAX_FORECAST_PERIODS: int = 14
+
+# ---------------------------------------------------------------------------
+# SPC convective outlook issuance schedule (UTC hour, minute).
+# Source: https://www.spc.noaa.gov/misc/about.html (Convective Outlook Issuance Times)
+#   Day 1 Outlook — 0600Z, 1300Z, 1630Z, 2000Z, 0100Z
+#   Day 2 Outlook — 1 AM CST/CDT (0700Z/0600Z) and 1730Z
+#   Day 3 Outlook — 2:30 AM CST/CDT (0830Z/0730Z) and 1930Z
+# The Day 2/Day 3 morning issuances are published in local Central time rather
+# than a fixed UTC time, so both the CST and CDT variants are included below;
+# the extra trigger a few times a year is harmless since fetches are cheap and
+# conditionally cached (ETag/Last-Modified).
+# ---------------------------------------------------------------------------
+SPC_OUTLOOK_SCHEDULE_UTC: list[tuple[int, int]] = [
+    (1, 0),    # Day 1 (0100Z)
+    (6, 0),    # Day 1 (0600Z) / Day 2 morning (CDT)
+    (7, 0),    # Day 2 morning (CST) / Day 3 morning (CDT, approx)
+    (8, 0),    # Day 3 morning (CST, approx)
+    (13, 0),   # Day 1 (1300Z)
+    (16, 30),  # Day 1 (1630Z)
+    (17, 30),  # Day 2 afternoon (1730Z)
+    (19, 30),  # Day 3 afternoon (1930Z)
+    (20, 0),   # Day 1 (2000Z)
+]
+
+# Minutes to wait after a scheduled issuance time before fetching, so SPC has
+# time to publish the updated PNG/GeoJSON files on their web server.
+SPC_FETCH_DELAY_MINUTES: int = 5
+
+# Dispatcher signal (per config entry) sent when the SPC risk data (GeoJSON)
+# has just been refreshed, so SPC map camera entities can refresh in step.
+SIGNAL_SPC_DATA_UPDATED = f"{DOMAIN}_spc_data_updated"

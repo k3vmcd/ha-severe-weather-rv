@@ -69,7 +69,7 @@ _MAX_IMAGE_WIDTH = 900
 _JPEG_QUALITY = 80
 
 
-def _encode_jpeg(img: "_PILImage.Image") -> bytes:
+def _encode_jpeg(img) -> bytes:
     """Flatten to RGB, downscale if oversized, and JPEG-encode for a small payload."""
     if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
         # JPEG has no alpha channel — flatten transparency onto white first.
@@ -103,9 +103,12 @@ def _optimize_standalone_image(data: bytes) -> tuple[bytes, str]:
         return data, "image/png"
 
 
-# Bound on how long integration setup waits for the initial map fetch —
-# prevents a slow/unreachable server from hanging entity registration.
-_PREWARM_TIMEOUT = 25
+# Bound on how many outbound map-image fetches run at once, shared across all
+# entities. A cold-start burst of ~15 simultaneous requests to spc.noaa.gov was
+# triggering failures/slow responses; capping concurrency fixes that at the
+# small cost of some fetches queueing briefly.
+_FETCH_CONCURRENCY = 4
+_FETCH_SEMAPHORE = asyncio.Semaphore(_FETCH_CONCURRENCY)
 
 
 async def async_setup_entry(
@@ -122,34 +125,31 @@ async def async_setup_entry(
     ]
     entities.append(RadarImage(hass, entry, coordinator, scan_interval))
 
-    # Warm every image's cache *before* entities are exposed to the frontend,
-    # so the very first dashboard view is never the one blocking on a live
-    # fetch (and never risks HA's ~10s image-proxy request timeout).
-    async def _prewarm_bounded(img) -> None:
-        try:
-            await asyncio.wait_for(img.async_prewarm(), timeout=_PREWARM_TIMEOUT)
-        except asyncio.TimeoutError:
-            _LOGGER.warning(
-                "Timed out warming the map cache for %s; will retry in the background",
-                getattr(img, "_attr_unique_id", img),
-            )
-
-    await asyncio.gather(*(_prewarm_bounded(img) for img in entities))
-
     async_add_entities(entities)
+
+    # Warm every image's cache in the background — never block HA startup on
+    # a live fetch. Freshness is guaranteed instead by this warm-up, the
+    # periodic fallback timer below, and (for SPC) the issuance-schedule /
+    # dispatcher signal, so nothing is lost by not waiting here.
+    hass.async_create_task(_prewarm_all(entities))
 
     # Background fallback refresh — entirely decoupled from dashboard/viewer
     # traffic, so images stay fresh even if nobody ever opens the dashboard.
     # SPC images are additionally kept in step with the real SPC issuance
     # schedule and risk-sensor updates (see __init__.py / coordinator.py).
     async def _periodic_refresh(_now) -> None:
-        await asyncio.gather(*(img.async_prewarm() for img in entities))
+        await _prewarm_all(entities)
 
     entry.async_on_unload(
         async_track_time_interval(
             hass, _periodic_refresh, timedelta(seconds=scan_interval)
         )
     )
+
+
+async def _prewarm_all(entities: list) -> None:
+    """Prewarm every entity concurrently (fetch concurrency is capped separately)."""
+    await asyncio.gather(*(img.async_prewarm() for img in entities))
 
 
 class SevereWeatherImage(ImageEntity):
@@ -384,7 +384,7 @@ async def _fetch_http_layer(hass: HomeAssistant, url: str) -> bytes | None:
         session = async_get_clientsession(hass)
         timeout = aiohttp.ClientTimeout(total=30)
         try:
-            async with session.get(url, timeout=timeout, headers=headers) as resp:
+            async with _FETCH_SEMAPHORE, session.get(url, timeout=timeout, headers=headers) as resp:
                 if resp.status == 304 and cached and cached.get("payload"):
                     cached["fetched_at"] = time.monotonic()
                     _cache_touch(_HTTP_LAYER_CACHE, url)

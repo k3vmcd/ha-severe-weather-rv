@@ -48,7 +48,7 @@ _MAX_COMPOSITE_CACHE_ITEMS = 48
 _HTTP_LAYER_CACHE: OrderedDict[str, dict] = OrderedDict()
 _HTTP_LAYER_LOCKS: dict[str, asyncio.Lock] = {}
 
-# Shared in-memory composite image cache (signature -> composed PNG bytes)
+# Shared in-memory composite image cache (signature -> composed JPEG bytes)
 _COMPOSITE_CACHE: OrderedDict[str, bytes] = OrderedDict()
 
 try:
@@ -60,6 +60,47 @@ except ImportError:  # pragma: no cover
     _LOGGER.warning(
         "Pillow (PIL) is not installed; SPC reference-map compositing is disabled"
     )
+
+# SPC/NHC source images are ~1500-2000px wide — far larger than any dashboard
+# card needs. Downscaling and re-encoding as JPEG cuts payload size roughly
+# 10-20x versus the original full-resolution PNG, which is what made the very
+# first (cold-cache) dashboard load feel slow.
+_MAX_IMAGE_WIDTH = 900
+_JPEG_QUALITY = 80
+
+
+def _encode_jpeg(img: "_PILImage.Image") -> bytes:
+    """Flatten to RGB, downscale if oversized, and JPEG-encode for a small payload."""
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        # JPEG has no alpha channel — flatten transparency onto white first.
+        rgba = img.convert("RGBA")
+        background = _PILImage.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.split()[-1])
+        img = background
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    if img.width > _MAX_IMAGE_WIDTH:
+        ratio = _MAX_IMAGE_WIDTH / img.width
+        img = img.resize(
+            (_MAX_IMAGE_WIDTH, max(1, round(img.height * ratio))), _PILImage.LANCZOS
+        )
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=_JPEG_QUALITY, optimize=True)
+    return buf.getvalue()
+
+
+def _optimize_standalone_image(data: bytes) -> tuple[bytes, str]:
+    """Re-encode a fetched image as a smaller JPEG; falls back to the original
+    bytes (as PNG) if PIL is unavailable or the image can't be decoded.
+    """
+    if not _PIL_AVAILABLE:
+        return data, "image/png"
+    try:
+        img = _PILImage.open(io.BytesIO(data))
+        return _encode_jpeg(img), "image/jpeg"
+    except Exception as exc:  # pylint: disable=broad-except
+        _LOGGER.debug("Could not re-encode image, using original bytes: %s", exc)
+        return data, "image/png"
 
 
 # Bound on how long integration setup waits for the initial map fetch —
@@ -185,12 +226,13 @@ class SevereWeatherImage(ImageEntity):
             self._hass.async_create_task(self._async_refresh_image())
         return self._image_cache
 
-    def _store_image(self, data: bytes) -> None:
+    def _store_image(self, data: bytes, content_type: str = "image/jpeg") -> None:
         """Cache new image bytes and bump image_last_updated so the entity
         picture URL changes — this is what lets the browser safely cache the
         picture across dashboard loads, tabs, and sessions until it's stale.
         """
         self._image_cache = data
+        self._attr_content_type = content_type
         self._attr_image_last_updated = dt_util.utcnow()
         if self.entity_id:
             self.async_write_ha_state()
@@ -221,16 +263,19 @@ class SevereWeatherImage(ImageEntity):
             await self._fetch_single_url(self._img_def["url"])
 
     async def _fetch_single_url(self, url: str) -> None:
-        """Fetch a single remote image and update the cache."""
+        """Fetch a single remote image, re-encode it smaller, and update the cache."""
         payload = await _fetch_http_layer(self._hass, url)
-        if payload is not None:
-            self._store_image(payload)
-            _LOGGER.debug("Fetched %s (%d bytes)", self._img_def["key"], len(payload))
-        else:
+        if payload is None:
             _LOGGER.warning("Image %s: failed to fetch %s", self._img_def["key"], url)
+            return
+        optimized, content_type = _optimize_standalone_image(payload)
+        self._store_image(optimized, content_type)
+        _LOGGER.debug(
+            "Fetched %s (%d bytes, %s)", self._img_def["key"], len(optimized), content_type
+        )
 
     async def _fetch_composite_layers(self, layer_urls: list[str]) -> None:
-        """Fetch all layers concurrently and composite them bottom-to-top into one PNG.
+        """Fetch all layers concurrently and composite them bottom-to-top into one JPEG.
 
         The first URL is the base/bottom image (e.g. SPC's complete outlook PNG).
         Subsequent URLs are transparent overlay PNGs (pop centres, interstates, cities).
@@ -271,7 +316,7 @@ class SevereWeatherImage(ImageEntity):
 
         cached_composite = _get_composite_cache(signature)
         if cached_composite is not None:
-            self._store_image(cached_composite)
+            self._store_image(cached_composite, "image/jpeg")
             self._last_composite_signature = signature
             return
 
@@ -282,7 +327,7 @@ class SevereWeatherImage(ImageEntity):
             return
 
         if composite is not None:
-            self._store_image(composite)
+            self._store_image(composite, "image/jpeg")
             self._last_composite_signature = signature
             _set_composite_cache(signature, composite)
 
@@ -369,11 +414,12 @@ async def _fetch_http_layer(hass: HomeAssistant, url: str) -> bytes | None:
 
 
 def _composite_layers(layer_bytes: list[bytes]) -> bytes | None:
-    """Composite a list of PNG images (bottom-to-top order) into one PNG.
+    """Composite a list of PNG images (bottom-to-top order) into one small JPEG.
 
     Each image is alpha-composited over the previous using its own alpha channel.
     A white opaque background is used as the starting canvas so the result is
-    always a fully opaque RGB image suitable for display.
+    always a fully opaque RGB image suitable for display.  The final composite
+    is downscaled/re-encoded via ``_encode_jpeg`` for a much smaller payload.
     Returns ``None`` if no valid images could be decoded.
     """
     if not layer_bytes or _PILImage is None:
@@ -401,9 +447,7 @@ def _composite_layers(layer_bytes: list[bytes]) -> bytes | None:
     if composite is None:
         return None
 
-    buf = io.BytesIO()
-    composite.convert("RGB").save(buf, format="PNG")
-    return buf.getvalue()
+    return _encode_jpeg(composite)
 
 
 # ---------------------------------------------------------------------------

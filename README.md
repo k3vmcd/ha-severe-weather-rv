@@ -11,7 +11,7 @@ Data sources: **NOAA NWS Alerts API**, **SPC (Storm Prediction Center)**, **NHC 
 - **Dynamic GPS tracking** — reads coordinates from any `device_tracker`, `person`, or pair of `input_number` helpers
 - **Real-time NWS alerts** — all active alerts for your exact GPS point, polled every 5 minutes (configurable)
 - **Derived threat levels** — separate sensors for tornado, severe thunderstorm, and hurricane at `NONE / WATCH / WARNING / EMERGENCY`
-- **DIKA Action Level** — single sensor rolls up all data into `NORMAL / MONITOR / PREPARE / ACT NOW` with plain-English reasons and recommended actions
+- **Action Level** — single sensor rolls up all data into `NORMAL / MONITOR / PREPARE / ACT NOW` with plain-English reasons and recommended actions
 - **Hourly rain analysis** — identifies specific rain/storm windows ("⛈ 2PM–5PM, 80% chance, 4h") rather than generic "Showers Possible"
 - **Day planning summary** — tells you the best clear window and whether it's worth making outdoor plans
 - **NWS 7-day forecast** — period-by-period forecast with precipitation probability
@@ -125,7 +125,7 @@ This doesn't replace the Threat Alert / SPC Risk Area blueprints — those still
 
 | Entity | Description |
 |--------|-------------|
-| `sensor.severe_weather_rv_monitor_action_level` | DIKA action level: `NORMAL / MONITOR / PREPARE / ACT NOW`. Attributes: `reasons` (list), `recommendations` (list) |
+| `sensor.severe_weather_rv_monitor_action_level` | Action level: `NORMAL / MONITOR / PREPARE / ACT NOW`. Attributes: `reasons` (list), `recommendations` (list) |
 | `sensor.severe_weather_rv_monitor_severe_weather_summary` | Rolled-up summary: `ALL CLEAR` → `TORNADO EMERGENCY` |
 | `sensor.severe_weather_rv_monitor_tornado_threat_level` | `NONE / WATCH / WARNING / EMERGENCY` |
 | `sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level` | `NONE / WATCH / WARNING` |
@@ -208,7 +208,7 @@ This doesn't replace the Threat Alert / SPC Risk Area blueprints — those still
 
 ## Dashboard
 
-The included `lovelace_dashboard.yaml` is a single-view tab you can add to any existing dashboard. It implements the **DIKA model** — Data → Information → Knowledge → Action — so the most critical information is always at the top.
+The included `lovelace_dashboard.yaml` is a single-view tab you can add to any existing dashboard.
 
 ### Layout (top to bottom)
 

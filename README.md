@@ -18,14 +18,14 @@ Data sources: **NOAA NWS Alerts API**, **SPC (Storm Prediction Center)**, **NHC 
 - **NWS current observations** — temperature, wind, humidity, visibility from nearest ASOS/AWOS station
 - **SPC outlook risk** — point-in-polygon detection for 9 SPC GeoJSON layers (Day 1–3 categorical, Day 1–2 tornado/hail/wind probabilities)
 - **NHC storm tracking** — count and distance to all active named tropical storms
-- **Camera entities** — SPC Day 1–3 categorical/probability maps + NHC Atlantic/Pacific outlooks + live NEXRAD radar tile
+- **Image entities** — SPC Day 1–3 categorical/probability maps + NHC Atlantic/Pacific outlooks + live NEXRAD radar tile, always pre-fetched in the background so the dashboard never has to wait for one to load
 - **Automation blueprints** — real-time threat alert + daily morning briefing, importable from the UI
 
 ---
 
 ## Requirements
 
-- Home Assistant **2023.1.0** or newer
+- Home Assistant **2026.5.0** or newer (see `manifest.json`)
 - [HACS](https://hacs.xyz) installed
 - Your RV's GPS position available as a `device_tracker`, `person`, or two `input_number` helpers in HA
 
@@ -65,7 +65,7 @@ The setup wizard has two steps:
 
 **Step 2 — Pick your entity/entities**
 
-That's it. All sensors and cameras are created automatically.
+That's it. All sensors and images are created automatically.
 
 ### Options (adjustable after setup)
 
@@ -74,9 +74,9 @@ Go to **Settings → Devices & Services → Severe Weather RV Monitor → Config
 | Option | Default | Description |
 |--------|---------|-------------|
 | Alert poll interval | 300 s (5 min) | How often NWS alerts are refreshed |
-| Outlook map refresh | 3600 s (1 hr) | Fallback refresh interval for SPC/NHC camera images |
+| Outlook map refresh | 3600 s (1 hr) | Fallback refresh interval for SPC/NHC map images |
 
-SPC Day 1–3 map cameras are also proactively refreshed in the background a few
+SPC Day 1–3 map images are also proactively refreshed in the background a few
 minutes after each real SPC convective-outlook issuance time (see Notes below),
 so the cached image is already current before anyone opens the dashboard —
 the interval above is just a safety-net fallback.
@@ -186,23 +186,23 @@ This doesn't replace the Threat Alert / SPC Risk Area blueprints — those still
 | `binary_sensor.severe_weather_rv_monitor_thunderstorm_likely_today` | Thunderstorms mentioned in today's forecast |
 | `binary_sensor.severe_weather_rv_monitor_precipitation_active_now` | Active rain/snow at the nearest observation station |
 
-### Camera Entities (13 total)
+### Image Entities (13 total)
 
 | Entity | Image |
 |--------|-------|
-| `camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook` | SPC Day 1 categorical risk map |
-| `camera.severe_weather_rv_monitor_spc_day_1_tornado_probability` | SPC Day 1 tornado probability map |
-| `camera.severe_weather_rv_monitor_spc_day_1_hail_probability` | SPC Day 1 hail probability map |
-| `camera.severe_weather_rv_monitor_spc_day_1_wind_probability` | SPC Day 1 wind probability map |
-| `camera.severe_weather_rv_monitor_spc_day_2_categorical_outlook` | SPC Day 2 categorical risk map |
-| `camera.severe_weather_rv_monitor_spc_day_2_tornado_probability` | SPC Day 2 tornado probability map |
-| `camera.severe_weather_rv_monitor_spc_day_2_hail_probability` | SPC Day 2 hail probability map |
-| `camera.severe_weather_rv_monitor_spc_day_2_wind_probability` | SPC Day 2 wind probability map |
-| `camera.severe_weather_rv_monitor_spc_day_3_categorical_outlook` | SPC Day 3 categorical risk map |
-| `camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook` | NHC Atlantic 2-day tropical outlook |
-| `camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook` | NHC Atlantic 7-day tropical outlook |
-| `camera.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook` | NHC Eastern Pacific 2-day outlook |
-| `camera.severe_weather_rv_monitor_nexrad_regional_radar` | NEXRAD radar tile for your current location |
+| `image.severe_weather_rv_monitor_spc_day_1_categorical_outlook` | SPC Day 1 categorical risk map |
+| `image.severe_weather_rv_monitor_spc_day_1_tornado_probability` | SPC Day 1 tornado probability map |
+| `image.severe_weather_rv_monitor_spc_day_1_hail_probability` | SPC Day 1 hail probability map |
+| `image.severe_weather_rv_monitor_spc_day_1_wind_probability` | SPC Day 1 wind probability map |
+| `image.severe_weather_rv_monitor_spc_day_2_categorical_outlook` | SPC Day 2 categorical risk map |
+| `image.severe_weather_rv_monitor_spc_day_2_tornado_probability` | SPC Day 2 tornado probability map |
+| `image.severe_weather_rv_monitor_spc_day_2_hail_probability` | SPC Day 2 hail probability map |
+| `image.severe_weather_rv_monitor_spc_day_2_wind_probability` | SPC Day 2 wind probability map |
+| `image.severe_weather_rv_monitor_spc_day_3_categorical_outlook` | SPC Day 3 categorical risk map |
+| `image.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook` | NHC Atlantic 2-day tropical outlook |
+| `image.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook` | NHC Atlantic 7-day tropical outlook |
+| `image.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook` | NHC Eastern Pacific 2-day outlook |
+| `image.severe_weather_rv_monitor_nexrad_regional_radar` | NEXRAD radar tile for your current location |
 
 ---
 
@@ -220,7 +220,7 @@ The included `lovelace_dashboard.yaml` is a single-view tab you can add to any e
 | **Current Conditions + Radar** | Temp, wind, humidity, visibility + Windy animated radar |
 | **Alert Details** | Full NWS alert text with expiry times |
 | **7-Day Forecast** | Icon + temp + rain % per period |
-| **SPC Maps** | Day 1–3 categorical and probability maps (from integration camera entities) |
+| **SPC Maps** | Day 1–3 categorical and probability maps (from integration image entities) |
 | **Tropical** | NHC storm tracking + Atlantic outlook maps |
 
 ### Installation
@@ -234,16 +234,18 @@ The included `lovelace_dashboard.yaml` is a single-view tab you can add to any e
 
 If you don't have `config-template-card`, replace the Live Radar section in the YAML with:
 ```yaml
-- type: camera
-  camera_image: camera.severe_weather_rv_monitor_nexrad_regional_radar
+- type: picture-entity
+  entity: image.severe_weather_rv_monitor_nexrad_regional_radar
 ```
 
 ---
 
 ## Notes
 
+- **Upgrading from an older version:** SPC/NHC/radar pictures moved from the `camera.*` domain to the `image.*` domain (e.g. `camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook` → `image.severe_weather_rv_monitor_spc_day_1_categorical_outlook`). This is required for the browser to properly cache the pictures (see below) but it means the old `camera.*` entities will show as unavailable — update any dashboards/automations referencing them (the included dashboard, blueprints, and example automation are already updated) and remove the orphaned `camera.*` entities from **Settings → Devices & Services → Entities**.
+- **Why `image` instead of `camera`:** these pictures are periodically-refreshed stills, not live video, so they use HA's `image` platform. Its entity-picture URL only changes when a new picture is actually fetched, which lets the browser cache it safely — including across dashboard reloads, new tabs, and new sessions — until the next real update, instead of re-requesting it every time the dashboard loads.
 - **NWS API** requires a `User-Agent` header per their terms of service. The integration sends `(severe_weather_rv Home Assistant integration)` — update `const.py` with your contact info if you fork this for personal use.
-- SPC issues Day 1 outlooks at 0100z, 0600z, 1300z, 1630z, and 2000z; Day 2 at ~0600/0700z and 1730z; Day 3 at ~0730/0830z and 1930z. The integration proactively re-fetches all SPC map cameras and risk-percentage sensors ~5 minutes after each of these times (plus once immediately on startup/reload), so the cached maps and `sensor.severe_weather_rv_monitor_spc_*_risk` entities stay in sync without anyone having to view the dashboard. The outlook scan interval above is only a fallback in case a scheduled fetch is missed.
+- SPC issues Day 1 outlooks at 0100z, 0600z, 1300z, 1630z, and 2000z; Day 2 at ~0600/0700z and 1730z; Day 3 at ~0730/0830z and 1930z. The integration proactively re-fetches all SPC map images and risk-percentage sensors ~5 minutes after each of these times (plus once immediately on startup/reload), so the cached maps and `sensor.severe_weather_rv_monitor_spc_*_risk` entities stay in sync without anyone having to view the dashboard. The outlook scan interval above is only a fallback in case a scheduled fetch is missed.
 - Hourly forecast data (used for rain windows) is fetched on the same slow-tier interval as the 7-day forecast to avoid over-polling the NWS API.
 - If entities show "unavailable" immediately after setup, allow up to one poll interval (default 5 min) for the first refresh to complete.
 

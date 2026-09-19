@@ -288,36 +288,33 @@ sections:
         heading_style: title
       - show_state: false
         show_name: true
-        camera_view: auto
         fit_mode: cover
         type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
+        entity: image.severe_weather_rv_monitor_spc_day_1_categorical_outlook
         name: Day 1 Categorical
         hold_action:
           action: url
           url_path: https://www.spc.noaa.gov/products/outlook/
       - show_state: false
         show_name: true
-        camera_view: auto
         fit_mode: cover
         type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_hail_probability
+        entity: image.severe_weather_rv_monitor_spc_day_1_hail_probability
         name: Day 1 Hail Probability
         hold_action:
           action: url
           url_path: https://www.spc.noaa.gov/products/outlook/day1otlk.html
       - show_state: false
         show_name: true
-        camera_view: auto
         fit_mode: cover
         type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_tornado_probability
+        entity: image.severe_weather_rv_monitor_spc_day_1_tornado_probability
         name: Day 1 Tornado Probability
         hold_action:
           action: url
           url_path: https://www.spc.noaa.gov/products/outlook/day1otlk.html
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_wind_probability
+        entity: image.severe_weather_rv_monitor_spc_day_1_wind_probability
         name: Wind Probability
         show_state: false
         hold_action:
@@ -327,19 +324,19 @@ sections:
       - type: heading
         heading: SPC Day 2 Outlook
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_categorical_outlook
+        entity: image.severe_weather_rv_monitor_spc_day_2_categorical_outlook
         name: Day 2 Categorical
         show_state: false
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_hail_probability
+        entity: image.severe_weather_rv_monitor_spc_day_2_hail_probability
         name: Day 2 Hail Prob
         show_state: false
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_tornado_probability
+        entity: image.severe_weather_rv_monitor_spc_day_2_tornado_probability
         name: Day 2 Tornado Prob
         show_state: false
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_wind_probability
+        entity: image.severe_weather_rv_monitor_spc_day_2_wind_probability
         name: Wind Probability
         show_state: false
         hold_action:
@@ -350,20 +347,20 @@ sections:
       - type: heading
         heading: SPC Day 3 Outlook
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_3_categorical_outlook
+        entity: image.severe_weather_rv_monitor_spc_day_3_categorical_outlook
         name: Day 3 Categorical
         show_state: false
       - type: heading
         heading: Tropical / Hurricane Outlook
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook
+        entity: image.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook
         name: Atlantic 2-Day
         show_state: false
         hold_action:
           action: url
           url_path: https://www.nhc.noaa.gov
       - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
+        entity: image.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
         name: Atlantic 7-Day
         show_state: false
         hold_action:
@@ -371,7 +368,7 @@ sections:
           url_path: https://www.nhc.noaa.gov
       - type: picture-entity
         entity: >-
-          camera.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook
+          image.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook
         name: Eastern Pacific 2-Day
         show_state: false
         hold_action:

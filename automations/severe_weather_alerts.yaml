@@ -53,13 +53,13 @@ actions:
         {% endif %}
       alert_image: >-
         {% if trigger.id == 'hail_day1' %}
-        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_hail_probability
+        /api/image_proxy/image.severe_weather_rv_monitor_spc_day_1_hail_probability
         {% elif trigger.id == 'hail_day2' %}
-        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_2_hail_probability
+        /api/image_proxy/image.severe_weather_rv_monitor_spc_day_2_hail_probability
         {% elif trigger.id == 'tornado' %}
-        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_tornado_probability
+        /api/image_proxy/image.severe_weather_rv_monitor_spc_day_1_tornado_probability
         {% else %}
-        /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
+        /api/image_proxy/image.severe_weather_rv_monitor_spc_day_1_categorical_outlook
         {% endif %}
       alert_tag: severe_weather_{{ trigger.id }}
   - data:

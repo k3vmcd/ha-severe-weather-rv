@@ -75,7 +75,7 @@ action:
         {{ '\n' ~ alert_count ~ ' active NWS alert(s) for your location.' if alert_count | int(0) > 0 else '' }}
         Tap to view SPC maps and full alert details.
       data:
-        image: "/api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook"
+        image: "/api/image_proxy/image.severe_weather_rv_monitor_spc_day_1_categorical_outlook"
         url: !input dashboard_path
         clickAction: !input dashboard_path
         tag: "severe_weather_rv_briefing"

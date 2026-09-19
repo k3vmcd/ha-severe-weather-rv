@@ -622,7 +622,7 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
         """Force an immediate full refresh, including slow-tier SPC data.
 
         Used by the SPC convective-outlook issuance schedule so risk sensors
-        and map cameras update as soon as SPC publishes new data, rather than
+        and map images update as soon as SPC publishes new data, rather than
         waiting for the next forecast_scan_interval tick.
         """
         self._force_extended_refresh = True
@@ -1339,7 +1339,7 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
         # ── DIKA action level (computed last — uses all derived fields) ────
         data.update(_compute_action_level(data))
 
-        # ── Notify SPC map cameras so they refresh in step with risk sensors ──
+        # ── Notify SPC map images so they refresh in step with risk sensors ──
         if slow_tier_updated:
             async_dispatcher_send(
                 self.hass, f"{SIGNAL_SPC_DATA_UPDATED}_{self.entry.entry_id}"

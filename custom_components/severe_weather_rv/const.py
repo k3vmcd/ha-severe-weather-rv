@@ -88,12 +88,12 @@ def _spc_layers(outlook_url: str) -> list[str]:
     return [outlook_url, *_SPC_REFERENCE_OVERLAYS]
 
 
-# Camera definitions: key, display name, layer_urls (bottom→top), MIME type.
-# SPC cameras use ``layer_urls`` so the outlook image is composited below the
+# Image entity definitions: key, display name, layer_urls (bottom→top), MIME type.
+# SPC entries use ``layer_urls`` so the outlook image is composited below the
 # reference overlays (pop centres, interstates, city labels).  When PIL is not
 # available the first entry — the complete SPC outlook PNG — is shown on its own.
-# NHC cameras use ``url`` only (no compositing needed).
-SPC_CAMERAS = [
+# NHC entries use ``url`` only (no compositing needed).
+SPC_IMAGE_DEFS = [
     {
         "key": "spc_day1_categorical",
         "name": "SPC Day 1 Categorical Outlook",
@@ -241,5 +241,5 @@ SPC_OUTLOOK_SCHEDULE_UTC: list[tuple[int, int]] = [
 SPC_FETCH_DELAY_MINUTES: int = 5
 
 # Dispatcher signal (per config entry) sent when the SPC risk data (GeoJSON)
-# has just been refreshed, so SPC map camera entities can refresh in step.
+# has just been refreshed, so SPC map image entities can refresh in step.
 SIGNAL_SPC_DATA_UPDATED = f"{DOMAIN}_spc_data_updated"

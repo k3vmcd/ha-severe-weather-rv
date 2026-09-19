@@ -12,7 +12,7 @@ from .coordinator import SevereWeatherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "camera"]
+PLATFORMS = ["sensor", "binary_sensor", "image"]
 
 
 def _buffered_time(hour: int, minute: int, delay_minutes: int) -> tuple[int, int]:
@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Reload the entry if options change (updates scan interval etc.)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    # Force a full refresh (risk sensors + SPC map cameras) shortly after each
+    # Force a full refresh (risk sensors + SPC map images) shortly after each
     # known SPC convective-outlook issuance time, instead of waiting for the
     # next forecast_scan_interval poll.
     async def _scheduled_spc_refresh(_now) -> None:

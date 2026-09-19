@@ -38,7 +38,7 @@ blueprint:
 
 trigger:
   - platform: state
-    entity_id: binary_sensor.severe_weather_rv_monitor_active_severe_threat
+    entity_id: binary_sensor.severe_weather_rv_monitor_active_severe_weather_threat
     to: "on"
 
   - platform: state

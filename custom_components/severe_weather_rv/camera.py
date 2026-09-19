@@ -49,6 +49,11 @@ except ImportError:  # pragma: no cover
     )
 
 
+# Bound on how long integration setup waits for the initial SPC map fetch —
+# prevents a slow/unreachable SPC server from hanging entity registration.
+_PREWARM_TIMEOUT = 25
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -62,13 +67,28 @@ async def async_setup_entry(
         for cam_def in SPC_CAMERAS
     ]
     entities.append(RadarCamera(hass, entry, coordinator, scan_interval))
-    async_add_entities(entities)
 
-    # Warm the SPC map cache immediately on setup/reload so the first dashboard
-    # view isn't slow — don't wait for a viewer or the next schedule tick.
-    for cam in entities:
-        if isinstance(cam, SevereWeatherCamera) and cam.is_spc_camera:
-            hass.async_create_task(cam.async_prewarm())
+    # Warm the SPC map cache *before* entities are exposed to the frontend, so
+    # the very first dashboard view is never the one blocking on a live fetch
+    # (and never risks HA's ~10s camera-image timeout / a broken-image flash).
+    async def _prewarm_bounded(cam: "SevereWeatherCamera") -> None:
+        try:
+            await asyncio.wait_for(cam.async_prewarm(), timeout=_PREWARM_TIMEOUT)
+        except asyncio.TimeoutError:
+            _LOGGER.warning(
+                "Timed out warming SPC map cache for %s; will retry in the background",
+                cam._cam_def["key"],
+            )
+
+    await asyncio.gather(
+        *(
+            _prewarm_bounded(cam)
+            for cam in entities
+            if isinstance(cam, SevereWeatherCamera) and cam.is_spc_camera
+        )
+    )
+
+    async_add_entities(entities)
 
 
 class SevereWeatherCamera(Camera):
@@ -188,23 +208,28 @@ class SevereWeatherCamera(Camera):
             _LOGGER.warning("Camera %s: failed to fetch %s", self._cam_def["key"], url)
 
     async def _fetch_composite_layers(self, layer_urls: list[str]) -> None:
-        """Fetch all layers in order and composite them bottom-to-top into one PNG.
+        """Fetch all layers concurrently and composite them bottom-to-top into one PNG.
 
         The first URL is the base/bottom image (e.g. SPC's complete outlook PNG).
         Subsequent URLs are transparent overlay PNGs (pop centres, interstates, cities).
-        Any layer that fails to fetch is silently skipped so the remaining layers
-        still render correctly.  The composite is only stored when the bottom/base
-        layer (index 0) was fetched successfully.
+        Layers are fetched in parallel (not sequentially) so a cold cache still
+        completes well within HA's camera-image request timeout.  Any layer that
+        fails to fetch is silently skipped so the remaining layers still render
+        correctly.  The composite is only stored when the bottom/base layer
+        (index 0) was fetched successfully.
         """
+        fetched = await asyncio.gather(
+            *(_fetch_http_layer(self._hass, url) for url in layer_urls)
+        )
+
         layer_bytes: list[bytes] = []
         base_present = False
 
-        for idx, url in enumerate(layer_urls):
-            data = await _fetch_http_layer(self._hass, url)
+        for idx, data in enumerate(fetched):
             if data is None:
                 _LOGGER.debug(
                     "Camera %s: failed to fetch layer %d (%s)",
-                    self._cam_def["key"], idx, url,
+                    self._cam_def["key"], idx, layer_urls[idx],
                 )
                 continue
             layer_bytes.append(data)

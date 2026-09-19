@@ -1,0 +1,177 @@
+blueprint:
+  name: "Storm Proximity Alert"
+  description: >
+    Sends a notification when a National Hurricane Center (NHC) active tropical
+    storm or hurricane moves within a configurable distance of your RV location.
+    Includes the storm name, category, distance, and movement direction.
+    A second optional alert fires when the storm enters the closer threshold.
+    Also notifies on rapid approach/category escalation events.
+  domain: automation
+  input:
+    notify_target:
+      name: Notification Service
+      description: >
+        The notification service to call (e.g. notify.mobile_app_my_phone).
+      selector:
+        text:
+    within_500mi_binary:
+      name: "Storm Within 500 Miles" Binary Sensor
+      description: >
+        Binary sensor that turns ON when any NHC storm centre is within 500
+        statute miles of your location.
+      default: binary_sensor.severe_weather_rv_monitor_storm_within_500mi
+      selector:
+        entity:
+          domain: binary_sensor
+    within_300mi_binary:
+      name: "Storm Within 300 Miles" Binary Sensor
+      description: >
+        Binary sensor that turns ON when any NHC storm centre is within 300
+        statute miles of your location.  Set to the same entity as the 500-mile
+        sensor to use only one threshold.
+      default: binary_sensor.severe_weather_rv_monitor_storm_within_300mi
+      selector:
+        entity:
+          domain: binary_sensor
+    storm_name_sensor:
+      name: Nearest Storm Name Sensor
+      description: Sensor showing the name of the nearest NHC storm.
+      default: sensor.severe_weather_rv_monitor_nearest_storm_name
+      selector:
+        entity:
+          domain: sensor
+    storm_distance_sensor:
+      name: Nearest Storm Distance Sensor
+      description: Sensor showing the statute-mile distance to the nearest storm centre.
+      default: sensor.severe_weather_rv_monitor_nearest_storm_distance
+      selector:
+        entity:
+          domain: sensor
+    storm_category_sensor:
+      name: Nearest Storm Category Sensor
+      description: Sensor showing the Saffir-Simpson category of the nearest storm.
+      default: sensor.severe_weather_rv_monitor_nearest_storm_category
+      selector:
+        entity:
+          domain: sensor
+    critical_ios:
+      name: iOS Critical Alert for Close Storm
+      description: >
+        Send a critical iOS alert (bypasses silent/Do Not Disturb) when the
+        storm enters the 300-mile threshold.  Requires a critical alert
+        entitlement on iOS.
+      default: true
+      selector:
+        boolean:
+    dashboard_path:
+      name: Dashboard Path
+      description: Lovelace dashboard to open when the notification is tapped.
+      default: /lovelace/severe-weather
+      selector:
+        text:
+    rapid_approach_delta:
+      name: Rapid Approach Delta (miles)
+      description: Notify when nearest storm distance decreases by at least this amount in one update.
+      default: 75
+      selector:
+        number:
+          min: 25
+          max: 300
+          step: 5
+          unit_of_measurement: mi
+          mode: slider
+
+trigger:
+  - platform: state
+    entity_id: !input within_500mi_binary
+    from: "off"
+    to: "on"
+    id: entered_500mi
+  - platform: state
+    entity_id: !input within_300mi_binary
+    from: "off"
+    to: "on"
+    id: entered_300mi
+  - platform: state
+    entity_id: !input storm_distance_sensor
+    id: distance_changed
+  - platform: state
+    entity_id: !input storm_category_sensor
+    id: category_changed
+
+variables:
+  storm_name_sensor: !input storm_name_sensor
+  storm_distance_sensor: !input storm_distance_sensor
+  storm_category_sensor: !input storm_category_sensor
+  critical_ios: !input critical_ios
+  rapid_approach_delta: !input rapid_approach_delta
+  is_close: "{{ trigger.id == 'entered_300mi' }}"
+  storm_name: "{{ states(storm_name_sensor) }}"
+  storm_dist: "{{ states(storm_distance_sensor) | round(0) }}"
+  storm_cat: "{{ states(storm_category_sensor) }}"
+  rapid_approach: >
+    {{
+      trigger.id == 'distance_changed'
+      and trigger.from_state is not none
+      and trigger.to_state is not none
+      and (trigger.from_state.state | float(0) - trigger.to_state.state | float(0)) >= rapid_approach_delta
+    }}
+  category_escalated: >
+    {{
+      trigger.id == 'category_changed'
+      and trigger.from_state is not none
+      and trigger.to_state is not none
+      and trigger.from_state.state != trigger.to_state.state
+      and 'Hurricane' in trigger.to_state.state
+    }}
+
+condition:
+  - condition: template
+    value_template: >
+      {{
+        trigger.id in ['entered_500mi', 'entered_300mi']
+        or rapid_approach
+        or category_escalated
+      }}
+
+action:
+  - service: !input notify_target
+    data:
+      title: >
+        {% if is_close %}
+        🔴 {{ storm_cat }} {{ storm_name }} — {{ storm_dist }} mi Away
+        {% elif category_escalated %}
+        🔴 {{ storm_name }} Strengthened — {{ storm_cat }}
+        {% elif rapid_approach %}
+        🟠 {{ storm_name }} Is Closing In Quickly
+        {% else %}
+        🟠 Tropical Storm {{ storm_name }} Approaching — {{ storm_dist }} mi Away
+        {% endif %}
+      message: >
+        {{ storm_cat }} {{ storm_name }} is now approximately {{ storm_dist }} statute
+        miles from your location (storm centre distance).
+
+        {% if is_close %}
+        ⚠️ The storm is within 300 miles — monitor NHC advisories closely and
+        consider evacuation if a watch or warning is issued for your area.
+        {% elif category_escalated %}
+        ⚠️ Storm intensity increased. Review cone updates and readiness actions now.
+        {% elif rapid_approach %}
+        ⚠️ The storm closed distance rapidly in the latest update cycle.
+        {% else %}
+        Monitor NHC advisories and be prepared to move if the storm track shifts
+        toward your location.
+        {% endif %}
+
+        Check the NHC 7-day tropical outlook for the current cone and track.
+      data:
+        image: /api/camera_proxy/camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
+        url: !input dashboard_path
+        push:
+          category: STORMALERT
+          sound: >
+            {% if is_close and critical_ios %}
+            {"name": "default", "critical": 1, "volume": 1.0}
+            {% else %}
+            default
+            {% endif %}

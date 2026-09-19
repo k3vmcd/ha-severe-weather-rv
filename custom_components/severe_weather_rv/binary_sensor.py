@@ -87,6 +87,89 @@ BINARY_SENSOR_DEFS = [
         BinarySensorDeviceClass.SAFETY,
         lambda d: d["hurricane_level"] in ("WARNING", "EMERGENCY"),
     ),
+    # ── SPC outlook risk ─────────────────────────────────────────────────
+    (
+        "in_spc_risk_area",
+        "In SPC Day 1 Risk Area",
+        "mdi:alert-box",
+        "mdi:check-box-outline",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["in_spc_risk_area"],
+    ),
+    (
+        "in_spc_moderate_high_risk",
+        "In SPC Day 1 Moderate or High Risk",
+        "mdi:alert-octagon",
+        "mdi:alert-octagon-outline",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["in_spc_moderate_high_risk"],
+    ),
+    (
+        "in_spc_tornado_risk",
+        "In SPC Day 1 Tornado Risk Area",
+        "mdi:weather-tornado",
+        "mdi:weather-tornado",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["in_spc_tornado_risk"],
+    ),
+    (
+        "in_spc_hail_risk",
+        "In SPC Day 1 Hail Risk Area",
+        "mdi:weather-hail",
+        "mdi:weather-hail",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["in_spc_hail_risk"],
+    ),
+    (
+        "in_spc_wind_risk",
+        "In SPC Day 1 Wind Risk Area",
+        "mdi:weather-windy",
+        "mdi:weather-windy",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["in_spc_wind_risk"],
+    ),
+    # ── Hurricane proximity ──────────────────────────────────────────────
+    (
+        "storm_within_300mi",
+        "NHC Storm Within 300 Miles",
+        "mdi:weather-hurricane",
+        "mdi:weather-hurricane-outline",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["storm_within_300mi"],
+    ),
+    (
+        "storm_within_500mi",
+        "NHC Storm Within 500 Miles",
+        "mdi:weather-hurricane",
+        "mdi:weather-hurricane-outline",
+        BinarySensorDeviceClass.SAFETY,
+        lambda d: d["storm_within_500mi"],
+    ),
+    # ── Forecast-based ───────────────────────────────────────────────────
+    (
+        "rain_likely_today",
+        "Rain Likely Today",
+        "mdi:weather-pouring",
+        "mdi:weather-sunny",
+        BinarySensorDeviceClass.MOISTURE,
+        lambda d: d["rain_likely_today"],
+    ),
+    (
+        "storm_likely_today",
+        "Thunderstorm Likely Today",
+        "mdi:weather-lightning",
+        "mdi:weather-sunny",
+        None,
+        lambda d: d["storm_likely_today"],
+    ),
+    (
+        "precipitation_active",
+        "Precipitation Active Now",
+        "mdi:weather-rainy",
+        "mdi:weather-sunny",
+        BinarySensorDeviceClass.MOISTURE,
+        lambda d: d["precipitation_active"],
+    ),
 ]
 
 
@@ -104,6 +187,8 @@ async def async_setup_entry(
 
 class SevereWeatherBinarySensor(CoordinatorEntity, BinarySensorEntity):
     """A binary sensor backed by the coordinator."""
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,

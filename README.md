@@ -10,12 +10,16 @@ Data sources: **NOAA NWS Alerts API**, **SPC (Storm Prediction Center)**, **NHC 
 
 - **Dynamic GPS tracking** — reads coordinates from any `device_tracker`, `person`, or pair of `input_number` helpers
 - **Real-time NWS alerts** — all active alerts for your exact GPS point, polled every 5 minutes (configurable)
-- **Derived threat levels** — separate sensors for tornado, severe thunderstorm/hail, and hurricane at `NONE / WATCH / WARNING / EMERGENCY`
-- **Overall summary sensor** — single-state rollup from `ALL CLEAR` through `TORNADO EMERGENCY`
-- **9 binary sensors** — granular on/off states for every threat type, great for automations
-- **11 camera entities** — SPC Day 1–3 categorical outlooks, Day 1–2 tornado/hail probability maps, NHC 2-day and 7-day Atlantic/Pacific tropical outlooks
-- **NHC storm tracking** — count and attributes for all active named storms
-- **Automation blueprints** — real-time threat alert + daily morning briefing, installable from the UI
+- **Derived threat levels** — separate sensors for tornado, severe thunderstorm, and hurricane at `NONE / WATCH / WARNING / EMERGENCY`
+- **DIKA Action Level** — single sensor rolls up all data into `NORMAL / MONITOR / PREPARE / ACT NOW` with plain-English reasons and recommended actions
+- **Hourly rain analysis** — identifies specific rain/storm windows ("⛈ 2PM–5PM, 80% chance, 4h") rather than generic "Showers Possible"
+- **Day planning summary** — tells you the best clear window and whether it's worth making outdoor plans
+- **NWS 7-day forecast** — period-by-period forecast with precipitation probability
+- **NWS current observations** — temperature, wind, humidity, visibility from nearest ASOS/AWOS station
+- **SPC outlook risk** — point-in-polygon detection for 9 SPC GeoJSON layers (Day 1–3 categorical, Day 1–2 tornado/hail/wind probabilities)
+- **NHC storm tracking** — count and distance to all active named tropical storms
+- **Camera entities** — SPC Day 1–3 categorical/probability maps + NHC Atlantic/Pacific outlooks + live NEXRAD radar tile
+- **Automation blueprints** — real-time threat alert + daily morning briefing, importable from the UI
 
 ---
 
@@ -25,9 +29,9 @@ Data sources: **NOAA NWS Alerts API**, **SPC (Storm Prediction Center)**, **NHC 
 - [HACS](https://hacs.xyz) installed
 - Your RV's GPS position available as a `device_tracker`, `person`, or two `input_number` helpers in HA
 
-### Recommended frontend cards (install via HACS Frontend)
-- `mushroom` — status tiles
-- `lovelace-card-mod` — conditional color styling (optional)
+### Recommended frontend cards (install via HACS → Frontend)
+- `mushroom` — color-coded action-level status card
+- `config-template-card` — dynamic Windy animated radar (optional)
 
 ---
 
@@ -96,254 +100,120 @@ Sends a daily summary at your chosen time with current threat levels and the Day
 
 ## Entities Created
 
-### Sensors
+### Sensors (36 total)
 
 | Entity | Description |
 |--------|-------------|
-| `sensor.severe_weather_rv_monitor_alert_count` | Total active NWS alerts at your location |
-| `sensor.severe_weather_rv_monitor_threat_alert_count` | Active tornado/tstorm/hurricane alerts only |
+| `sensor.severe_weather_rv_monitor_action_level` | DIKA action level: `NORMAL / MONITOR / PREPARE / ACT NOW`. Attributes: `reasons` (list), `recommendations` (list) |
+| `sensor.severe_weather_rv_monitor_severe_weather_summary` | Rolled-up summary: `ALL CLEAR` → `TORNADO EMERGENCY` |
 | `sensor.severe_weather_rv_monitor_tornado_threat_level` | `NONE / WATCH / WARNING / EMERGENCY` |
 | `sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level` | `NONE / WATCH / WARNING` |
 | `sensor.severe_weather_rv_monitor_hurricane_threat_level` | `NONE / WATCH / WARNING / EMERGENCY / TROPICAL STORM WATCH / TROPICAL STORM WARNING` |
-| `sensor.severe_weather_rv_monitor_severe_weather_summary` | Rolled-up summary: `ALL CLEAR` → `TORNADO EMERGENCY` |
-| `sensor.severe_weather_rv_monitor_highest_severity` | NWS severity of most severe active alert |
-| `sensor.severe_weather_rv_monitor_top_alert_headline` | Headline text of highest-priority alert |
+| `sensor.severe_weather_rv_monitor_alert_count` | Total active NWS alerts |
+| `sensor.severe_weather_rv_monitor_threat_alert_count` | Active tornado/tstorm/hurricane alerts only |
+| `sensor.severe_weather_rv_monitor_top_alert_headline` | Headline of highest-priority alert. Attribute: `all_alerts` (list) |
+| `sensor.severe_weather_rv_monitor_highest_alert_severity` | NWS severity of most severe active alert |
+| `sensor.severe_weather_rv_monitor_rain_summary` | Plain-English rain window: e.g. "⛈ 2PM–5PM (4h, 80%)". Attributes: `rain_windows`, `hourly_periods` |
+| `sensor.severe_weather_rv_monitor_day_outlook` | Day planning summary, e.g. "Mostly clear. Best window: 9AM–12PM" |
+| `sensor.severe_weather_rv_monitor_forecast_today` | NWS short forecast for today |
+| `sensor.severe_weather_rv_monitor_forecast_tonight` | NWS short forecast for tonight |
+| `sensor.severe_weather_rv_monitor_precipitation_chance_today` | Today's precipitation probability (%) |
+| `sensor.severe_weather_rv_monitor_7_day_forecast` | Period count. Attribute: `periods` (list with name, temperature, wind, short_forecast, precip_probability) |
+| `sensor.severe_weather_rv_monitor_current_conditions` | Current sky conditions from nearest ASOS station |
+| `sensor.severe_weather_rv_monitor_current_temperature` | Current temperature (°F) |
+| `sensor.severe_weather_rv_monitor_current_wind_speed` | Current wind speed (mph) |
+| `sensor.severe_weather_rv_monitor_current_wind_direction` | Current wind direction (°) |
+| `sensor.severe_weather_rv_monitor_current_humidity` | Current relative humidity (%) |
+| `sensor.severe_weather_rv_monitor_current_visibility` | Current visibility (mi) |
+| `sensor.severe_weather_rv_monitor_spc_day_1_risk` | SPC Day 1 categorical risk level |
+| `sensor.severe_weather_rv_monitor_spc_day_2_risk` | SPC Day 2 categorical risk level |
+| `sensor.severe_weather_rv_monitor_spc_day_3_risk` | SPC Day 3 categorical risk level |
+| `sensor.severe_weather_rv_monitor_spc_day_1_tornado_risk` | SPC Day 1 tornado probability at your location |
+| `sensor.severe_weather_rv_monitor_spc_day_1_hail_risk` | SPC Day 1 hail probability at your location |
+| `sensor.severe_weather_rv_monitor_spc_day_1_wind_risk` | SPC Day 1 wind probability at your location |
+| `sensor.severe_weather_rv_monitor_spc_day_2_tornado_risk` | SPC Day 2 tornado probability |
+| `sensor.severe_weather_rv_monitor_spc_day_2_hail_risk` | SPC Day 2 hail probability |
+| `sensor.severe_weather_rv_monitor_spc_day_2_wind_risk` | SPC Day 2 wind probability |
 | `sensor.severe_weather_rv_monitor_nhc_active_storms` | Count of active named tropical storms |
+| `sensor.severe_weather_rv_monitor_nearest_storm_name` | Name of nearest NHC storm |
+| `sensor.severe_weather_rv_monitor_nearest_storm_distance` | Distance to nearest storm (mi) |
+| `sensor.severe_weather_rv_monitor_nearest_storm_category` | Category of nearest storm |
 | `sensor.severe_weather_rv_monitor_monitored_latitude` | Currently polled latitude |
 | `sensor.severe_weather_rv_monitor_monitored_longitude` | Currently polled longitude |
 
-### Binary Sensors
+### Binary Sensors (19 total)
 
 | Entity | On when... |
 |--------|------------|
-| `binary_sensor.severe_weather_rv_monitor_active_severe_threat` | Any tornado/tstorm/hurricane alert active |
-| `binary_sensor.severe_weather_rv_monitor_any_alert_active` | Any NWS alert active |
-| `binary_sensor.severe_weather_rv_monitor_tornado_active` | Tornado watch or warning |
+| `binary_sensor.severe_weather_rv_monitor_active_severe_weather_threat` | Any tornado/tstorm/hurricane alert active |
+| `binary_sensor.severe_weather_rv_monitor_any_weather_alert_active` | Any NWS alert active |
+| `binary_sensor.severe_weather_rv_monitor_tornado_watch_or_warning` | Tornado watch or warning |
 | `binary_sensor.severe_weather_rv_monitor_tornado_warning` | Tornado warning or emergency |
-| `binary_sensor.severe_weather_rv_monitor_tornado_emergency` | Tornado emergency only |
-| `binary_sensor.severe_weather_rv_monitor_thunderstorm_active` | Severe thunderstorm watch or warning |
-| `binary_sensor.severe_weather_rv_monitor_thunderstorm_warning` | Severe thunderstorm warning only |
-| `binary_sensor.severe_weather_rv_monitor_hurricane_active` | Any tropical threat |
+| `binary_sensor.severe_weather_rv_monitor_tornado_emergency` | Tornado emergency |
+| `binary_sensor.severe_weather_rv_monitor_severe_thunderstorm_watch_or_warning` | Severe thunderstorm watch or warning |
+| `binary_sensor.severe_weather_rv_monitor_severe_thunderstorm_warning` | Severe thunderstorm warning |
+| `binary_sensor.severe_weather_rv_monitor_hurricane_or_tropical_storm_watch_or_warning` | Any tropical threat |
 | `binary_sensor.severe_weather_rv_monitor_hurricane_warning` | Hurricane warning or emergency |
+| `binary_sensor.severe_weather_rv_monitor_in_spc_day_1_risk_area` | Inside an SPC Day 1 risk polygon (excludes General Thunder) |
+| `binary_sensor.severe_weather_rv_monitor_in_spc_day_1_moderate_or_high_risk` | Inside Moderate or High risk |
+| `binary_sensor.severe_weather_rv_monitor_in_spc_day_1_tornado_risk_area` | Inside a Day 1 tornado probability polygon |
+| `binary_sensor.severe_weather_rv_monitor_in_spc_day_1_hail_risk_area` | Inside a Day 1 hail probability polygon |
+| `binary_sensor.severe_weather_rv_monitor_in_spc_day_1_wind_risk_area` | Inside a Day 1 wind probability polygon |
+| `binary_sensor.severe_weather_rv_monitor_nhc_storm_within_300_miles` | Tropical storm within 300 mi |
+| `binary_sensor.severe_weather_rv_monitor_nhc_storm_within_500_miles` | Tropical storm within 500 mi |
+| `binary_sensor.severe_weather_rv_monitor_rain_likely_today` | NWS precipitation chance ≥ 40% today |
+| `binary_sensor.severe_weather_rv_monitor_thunderstorm_likely_today` | Thunderstorms mentioned in today's forecast |
+| `binary_sensor.severe_weather_rv_monitor_precipitation_active_now` | Active rain/snow at the nearest observation station |
 
-### Cameras
+### Camera Entities (12 total)
 
 | Entity | Image |
 |--------|-------|
-| `camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook` | SPC Day 1 categorical risk |
-| `camera.severe_weather_rv_monitor_spc_day_1_tornado_probability` | SPC Day 1 tornado probability |
-| `camera.severe_weather_rv_monitor_spc_day_1_hail_probability` | SPC Day 1 hail probability |
-| `camera.severe_weather_rv_monitor_spc_day_1_wind_probability` | SPC Day 1 wind probability |
-| `camera.severe_weather_rv_monitor_spc_day_2_categorical_outlook` | SPC Day 2 categorical risk |
-| `camera.severe_weather_rv_monitor_spc_day_2_tornado_probability` | SPC Day 2 tornado probability |
-| `camera.severe_weather_rv_monitor_spc_day_2_hail_probability` | SPC Day 2 hail probability |
-| `camera.severe_weather_rv_monitor_spc_day_3_categorical_outlook` | SPC Day 3 categorical risk |
+| `camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook` | SPC Day 1 categorical risk map |
+| `camera.severe_weather_rv_monitor_spc_day_1_tornado_probability` | SPC Day 1 tornado probability map |
+| `camera.severe_weather_rv_monitor_spc_day_1_hail_probability` | SPC Day 1 hail probability map |
+| `camera.severe_weather_rv_monitor_spc_day_1_wind_probability` | SPC Day 1 wind probability map |
+| `camera.severe_weather_rv_monitor_spc_day_2_categorical_outlook` | SPC Day 2 categorical risk map |
+| `camera.severe_weather_rv_monitor_spc_day_2_tornado_probability` | SPC Day 2 tornado probability map |
+| `camera.severe_weather_rv_monitor_spc_day_2_hail_probability` | SPC Day 2 hail probability map |
+| `camera.severe_weather_rv_monitor_spc_day_3_categorical_outlook` | SPC Day 3 categorical risk map |
 | `camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook` | NHC Atlantic 2-day tropical outlook |
 | `camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook` | NHC Atlantic 7-day tropical outlook |
-| `camera.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook` | NHC Eastern Pacific 2-day |
+| `camera.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook` | NHC Eastern Pacific 2-day outlook |
+| `camera.severe_weather_rv_monitor_nexrad_regional_radar` | NEXRAD radar tile for your current location |
 
 ---
 
 ## Dashboard
 
-Create a new dashboard view and paste this YAML (Edit Dashboard → Raw configuration editor).  
-Requires `mushroom` cards from HACS. The layout uses the **Sections** view type (Home Assistant 2024.1+), which groups cards into named, collapsible sections arranged in a two-column grid. Tornado and hail probability maps each occupy a full-width row so they're large and easy to read at a glance.
+The included `lovelace_dashboard.yaml` is a single-view tab you can add to any existing dashboard. It implements the **DIKA model** — Data → Information → Knowledge → Action — so the most critical information is always at the top.
 
+### Layout (top to bottom)
+
+| Section | What it shows |
+|---------|---------------|
+| **Action Level** | Color-coded `NORMAL / MONITOR / PREPARE / ACT NOW` with plain-English reasons and 1-line action summary |
+| **Today's Plan** | Specific rain windows ("⛈ 2PM–5PM, 80%, 4h") + day outlook ("Best clear window: 9AM–12PM") |
+| **Active Threats** | NWS alert count, tornado/thunderstorm/hurricane levels, SPC Day 1 risk |
+| **Current Conditions + Radar** | Temp, wind, humidity, visibility + Windy animated radar |
+| **Alert Details** | Full NWS alert text with expiry times |
+| **7-Day Forecast** | Icon + temp + rain % per period |
+| **SPC Maps** | Day 1–3 categorical and probability maps (from integration camera entities) |
+| **Tropical** | NHC storm tracking + Atlantic outlook maps |
+
+### Installation
+
+1. Open your existing dashboard → Edit → **Raw Configuration Editor**
+2. Under `views:`, paste the contents of `lovelace_dashboard.yaml` (starting at `- title: Severe Weather`)
+
+**Required HACS frontend cards:**
+- `mushroom` — color-coded Action Level card
+- `config-template-card` — dynamic Windy radar centered on your GPS location (optional)
+
+If you don't have `config-template-card`, replace the Live Radar section in the YAML with:
 ```yaml
-title: Severe Weather
-path: severe-weather
-icon: mdi:weather-lightning-rainy
-type: sections
-max_columns: 2
-
-sections:
-
-  # ── Summary header + threat tiles ────────────────────────────────────
-  - title: Current Status
-    column_span: 2
-    cards:
-      - type: custom:mushroom-template-card
-        primary: "{{ states('sensor.severe_weather_rv_monitor_severe_weather_summary') }}"
-        secondary: "{{ states('sensor.severe_weather_rv_monitor_top_alert_headline') }}"
-        icon: mdi:weather-lightning-rainy
-        icon_color: >
-          {% set s = states('sensor.severe_weather_rv_monitor_severe_weather_summary') %}
-          {{ 'red' if 'EMERGENCY' in s or 'WARNING' in s
-             else 'orange' if 'THREAT' in s or 'WATCH' in s
-             else 'green' }}
-        multiline_secondary: true
-        tap_action:
-          action: none
-
-      - type: horizontal-stack
-        cards:
-          - type: custom:mushroom-template-card
-            primary: Tornado
-            secondary: "{{ states('sensor.severe_weather_rv_monitor_tornado_threat_level') }}"
-            icon: mdi:weather-tornado
-            fill_container: true
-            icon_color: >
-              {% set t = states('sensor.severe_weather_rv_monitor_tornado_threat_level') %}
-              {{ 'red' if t in ['WARNING','EMERGENCY'] else 'orange' if t == 'WATCH' else 'green' }}
-
-          - type: custom:mushroom-template-card
-            primary: Hail / Tstorm
-            secondary: "{{ states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') }}"
-            icon: mdi:weather-hail
-            fill_container: true
-            icon_color: >
-              {% set s = states('sensor.severe_weather_rv_monitor_severe_thunderstorm_threat_level') %}
-              {{ 'red' if s == 'WARNING' else 'orange' if s == 'WATCH' else 'green' }}
-
-          - type: custom:mushroom-template-card
-            primary: Hurricane
-            secondary: "{{ states('sensor.severe_weather_rv_monitor_hurricane_threat_level') }}"
-            icon: mdi:weather-hurricane
-            fill_container: true
-            icon_color: >
-              {% set h = states('sensor.severe_weather_rv_monitor_hurricane_threat_level') %}
-              {{ 'red' if 'WARNING' in h or 'EMERGENCY' in h else 'orange' if 'WATCH' in h else 'green' }}
-
-  # ── Location ──────────────────────────────────────────────────────────
-  - title: Location
-    cards:
-      - type: custom:mushroom-template-card
-        primary: "{{ states('sensor.severe_weather_rv_monitor_alert_count') }} Active Alerts"
-        secondary: >
-          {{ states('sensor.severe_weather_rv_monitor_monitored_latitude') }}°,
-          {{ states('sensor.severe_weather_rv_monitor_monitored_longitude') }}°
-        icon: mdi:map-marker-radius
-
-      - type: custom:mushroom-template-card
-        primary: "{{ states('sensor.severe_weather_rv_monitor_nhc_active_storms') }} Named Storm(s)"
-        secondary: "NHC Active Tropics"
-        icon: mdi:weather-hurricane
-
-  # ── Active alert details ──────────────────────────────────────────────
-  - title: Active Alerts
-    cards:
-      - type: conditional
-        conditions:
-          - entity: binary_sensor.severe_weather_rv_monitor_any_alert_active
-            state: "on"
-        card:
-          type: markdown
-          title: "Active NWS Alerts"
-          content: >
-            {% set alerts = state_attr('sensor.severe_weather_rv_monitor_top_alert_headline', 'all_alerts') or [] %}
-            {% if alerts | length == 0 %}
-            ✅ No active alerts.
-            {% else %}
-            {% for a in alerts %}
-            **{{ a.event }}** — {{ a.severity }}
-            *{{ a.headline }}*
-            Expires: {{ a.expires }}
-            ---
-            {% endfor %}
-            {% endif %}
-
-  # ── SPC Day 1 categorical (full-width) ───────────────────────────────
-  - title: "SPC Day 1 — Categorical Risk"
-    column_span: 2
-    cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
-        name: "Day 1 Categorical"
-        show_state: false
-        tap_action:
-          action: url
-          url_path: "https://www.spc.noaa.gov/products/outlook/"
-
-  # ── Day 1 tornado probability (full-width for readability) ────────────
-  - title: "Day 1 — Tornado Probability"
-    column_span: 2
-    cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_tornado_probability
-        name: "Tornado Probability"
-        show_state: false
-        tap_action:
-          action: url
-          url_path: "https://www.spc.noaa.gov/products/outlook/day1otlk.html"
-
-  # ── Day 1 hail probability (full-width for readability) ───────────────
-  - title: "Day 1 — Hail Probability"
-    column_span: 2
-    cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_hail_probability
-        name: "Hail Probability"
-        show_state: false
-        tap_action:
-          action: url
-          url_path: "https://www.spc.noaa.gov/products/outlook/day1otlk.html"
-
-  # ── Day 1 wind / Day 2 categorical (side by side) ────────────────────
-  - title: "Day 1 — Wind Probability"
-    cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_1_wind_probability
-        name: "Wind Probability"
-        show_state: false
-        tap_action:
-          action: url
-          url_path: "https://www.spc.noaa.gov/products/outlook/day1otlk.html"
-
-  - title: "SPC Day 2 Outlook"
-    cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_categorical_outlook
-        name: "Day 2 Categorical"
-        show_state: false
-
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_tornado_probability
-        name: "Day 2 Tornado Prob"
-        show_state: false
-
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_2_hail_probability
-        name: "Day 2 Hail Prob"
-        show_state: false
-
-  # ── SPC Day 3 (full-width) ────────────────────────────────────────────
-  - title: "SPC Day 3 Outlook"
-    column_span: 2
-    cards:
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_spc_day_3_categorical_outlook
-        name: "Day 3 Categorical"
-        show_state: false
-
-  # ── NHC Tropical (full-width) ─────────────────────────────────────────
-  - title: "Tropical / Hurricane Outlook"
-    column_span: 2
-    cards:
-      - type: horizontal-stack
-        cards:
-          - type: picture-entity
-            entity: camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook
-            name: "Atlantic 2-Day"
-            show_state: false
-            tap_action:
-              action: url
-              url_path: "https://www.nhc.noaa.gov"
-
-          - type: picture-entity
-            entity: camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
-            name: "Atlantic 7-Day"
-            show_state: false
-            tap_action:
-              action: url
-              url_path: "https://www.nhc.noaa.gov"
-
-      - type: picture-entity
-        entity: camera.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook
-        name: "Eastern Pacific 2-Day"
-        show_state: false
-        tap_action:
-          action: url
-          url_path: "https://www.nhc.noaa.gov"
+- type: camera
+  camera_image: camera.severe_weather_rv_monitor_nexrad_regional_radar
 ```
 
 ---
@@ -351,11 +221,13 @@ sections:
 ## Notes
 
 - **NWS API** requires a `User-Agent` header per their terms of service. The integration sends `(severe_weather_rv Home Assistant integration)` — update `const.py` with your contact info if you fork this for personal use.
-- SPC outlook images are updated at approximately 0600z, 1300z, 1630z, and 2000z daily. The hourly camera refresh is intentionally conservative to avoid hammering SPC servers.
-- If the NWS API returns no data immediately after setup, allow up to one poll interval (default 5 min) for the first refresh to complete.
+- SPC outlook images are updated at approximately 0600z, 1300z, 1630z, and 2000z daily. Camera entities cache the latest image and refresh on the configured outlook scan interval (default 1 hour).
+- Hourly forecast data (used for rain windows) is fetched on the same slow-tier interval as the 7-day forecast to avoid over-polling the NWS API.
+- If entities show "unavailable" immediately after setup, allow up to one poll interval (default 5 min) for the first refresh to complete.
 
 ---
 
 ## License
+
 
 MIT

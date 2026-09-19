@@ -41,7 +41,8 @@
         "description": "Adjust how frequently weather data is refreshed.",
         "data": {
           "alert_scan_interval": "Alert poll interval (seconds)",
-          "outlook_scan_interval": "Outlook map refresh interval (seconds)"
+          "outlook_scan_interval": "Outlook map refresh interval (seconds)",
+          "forecast_scan_interval": "Forecast & SPC data refresh interval (seconds)"
         }
       }
     }

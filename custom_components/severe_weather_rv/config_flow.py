@@ -13,11 +13,13 @@ from .const import (
     CONF_GPS_LON_ENTITY,
     CONF_ALERT_SCAN_INTERVAL,
     CONF_OUTLOOK_SCAN_INTERVAL,
+    CONF_FORECAST_SCAN_INTERVAL,
     GPS_TYPE_HA_HOME,
     GPS_TYPE_DEVICE_TRACKER,
     GPS_TYPE_INPUT_NUMBER,
     DEFAULT_ALERT_SCAN_INTERVAL,
     DEFAULT_OUTLOOK_SCAN_INTERVAL,
+    DEFAULT_FORECAST_SCAN_INTERVAL,
 )
 
 
@@ -88,6 +90,7 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             options={
                 CONF_ALERT_SCAN_INTERVAL: DEFAULT_ALERT_SCAN_INTERVAL,
                 CONF_OUTLOOK_SCAN_INTERVAL: DEFAULT_OUTLOOK_SCAN_INTERVAL,
+                CONF_FORECAST_SCAN_INTERVAL: DEFAULT_FORECAST_SCAN_INTERVAL,
             },
         )
 
@@ -116,6 +119,7 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     options={
                         CONF_ALERT_SCAN_INTERVAL: DEFAULT_ALERT_SCAN_INTERVAL,
                         CONF_OUTLOOK_SCAN_INTERVAL: DEFAULT_OUTLOOK_SCAN_INTERVAL,
+                        CONF_FORECAST_SCAN_INTERVAL: DEFAULT_FORECAST_SCAN_INTERVAL,
                     },
                 )
 
@@ -165,6 +169,7 @@ class SevereWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         options={
                             CONF_ALERT_SCAN_INTERVAL: DEFAULT_ALERT_SCAN_INTERVAL,
                             CONF_OUTLOOK_SCAN_INTERVAL: DEFAULT_OUTLOOK_SCAN_INTERVAL,
+                            CONF_FORECAST_SCAN_INTERVAL: DEFAULT_FORECAST_SCAN_INTERVAL,
                         },
                     )
                 except ValueError:
@@ -232,6 +237,18 @@ class SevereWeatherOptionsFlow(config_entries.OptionsFlow):
                             min=1800,
                             max=86400,
                             step=1800,
+                            unit_of_measurement="seconds",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Required(
+                        CONF_FORECAST_SCAN_INTERVAL,
+                        default=current.get(CONF_FORECAST_SCAN_INTERVAL, DEFAULT_FORECAST_SCAN_INTERVAL),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=900,
+                            max=7200,
+                            step=300,
                             unit_of_measurement="seconds",
                             mode=selector.NumberSelectorMode.SLIDER,
                         )

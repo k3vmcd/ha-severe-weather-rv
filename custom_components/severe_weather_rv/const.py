@@ -16,11 +16,16 @@ GPS_TYPE_DEVICE_TRACKER = "device_tracker"
 GPS_TYPE_INPUT_NUMBER = "input_number"
 
 # Defaults
-DEFAULT_ALERT_SCAN_INTERVAL = 300   # 5 minutes
+DEFAULT_ALERT_SCAN_INTERVAL = 300    # 5 minutes
 DEFAULT_OUTLOOK_SCAN_INTERVAL = 3600  # 1 hour
+DEFAULT_FORECAST_SCAN_INTERVAL = 1800  # 30 minutes
+
+# Config entry keys — scan intervals
+CONF_FORECAST_SCAN_INTERVAL = "forecast_scan_interval"
 
 # API endpoints
 NWS_ALERTS_URL = "https://api.weather.gov/alerts/active"
+NWS_POINTS_URL = "https://api.weather.gov/points"
 NHC_STORMS_URL = "https://www.nhc.noaa.gov/CurrentStorms.json"
 NWS_USER_AGENT = "(severe_weather_rv Home Assistant integration)"
 
@@ -156,3 +161,48 @@ SPC_CAMERAS = [
         "content_type": "image/png",
     },
 ]
+
+# ---------------------------------------------------------------------------
+# SPC GeoJSON URLs for point-in-polygon risk detection
+# Each URL returns a FeatureCollection with polygon risk areas.
+# Categorical: LABEL property → "HIGH","MDT","ENH","SLGT","MRGL","TSTM"
+# Hazard-specific: LABEL property → decimal probability string ("0.02","0.05",
+#   "0.10","0.15","0.30","0.45","0.60") or "0.10sig" for significant severe.
+# Correct URL format uses the no-layered (donut-hole) GeoJSON variant.
+# ---------------------------------------------------------------------------
+SPC_GEOJSON_URLS: dict[str, str] = {
+    "day1_categorical": f"{_SPC_OUTLOOK_BASE}/day1otlk_cat.nolyr.geojson",
+    "day2_categorical": f"{_SPC_OUTLOOK_BASE}/day2otlk_cat.nolyr.geojson",
+    "day3_categorical": f"{_SPC_OUTLOOK_BASE}/day3otlk_cat.nolyr.geojson",
+    "day1_tornado":     f"{_SPC_OUTLOOK_BASE}/day1otlk_torn.nolyr.geojson",
+    "day1_hail":        f"{_SPC_OUTLOOK_BASE}/day1otlk_hail.nolyr.geojson",
+    "day1_wind":        f"{_SPC_OUTLOOK_BASE}/day1otlk_wind.nolyr.geojson",
+    "day2_tornado":     f"{_SPC_OUTLOOK_BASE}/day2otlk_torn.nolyr.geojson",
+    "day2_hail":        f"{_SPC_OUTLOOK_BASE}/day2otlk_hail.nolyr.geojson",
+    "day2_wind":        f"{_SPC_OUTLOOK_BASE}/day2otlk_wind.nolyr.geojson",
+}
+
+# SPC categorical risk display names, ordered highest → lowest
+SPC_RISK_ORDER: list[str] = [
+    "High", "Moderate", "Enhanced", "Slight", "Marginal", "General Thunder",
+]
+
+# Map SPC categorical LABEL → display name
+SPC_CATEGORICAL_LABEL_MAP: dict[str, str] = {
+    "HIGH": "High",
+    "MDT":  "Moderate",
+    "ENH":  "Enhanced",
+    "SLGT": "Slight",
+    "MRGL": "Marginal",
+    "TSTM": "General Thunder",
+}
+
+# Storm proximity thresholds (statute miles from storm center)
+STORM_PROXIMITY_CLOSE_MILES: int = 300
+STORM_PROXIMITY_FAR_MILES: int = 500
+
+# Location change threshold (decimal degrees) that triggers a NWS point re-fetch (~7 miles)
+LOCATION_CHANGE_THRESHOLD: float = 0.1
+
+# Maximum forecast periods to store (14 = 7 day/night pairs)
+MAX_FORECAST_PERIODS: int = 14

@@ -1,0 +1,201 @@
+blueprint:
+  name: "SPC Risk Area Alert"
+  description: >
+    Sends notifications when SPC risk at your exact location materially changes.
+    Triggers include entering a Day 1 categorical risk area and hazard-specific
+    escalation (hail/tornado/wind probabilities increasing, especially 0% to >0%).
+    Uses the latest Day 1 outlook map image in the push payload.
+  domain: automation
+  input:
+    notify_target:
+      name: Notification Service
+      description: >
+        The notification service to call (e.g. notify.mobile_app_my_phone).
+      selector:
+        text:
+    risk_sensor:
+      name: SPC Day 1 Risk Sensor
+      description: >
+        The "SPC Day 1 Risk" sensor from the Severe Weather RV Monitor integration.
+      default: sensor.severe_weather_rv_monitor_spc_day_1_risk
+      selector:
+        entity:
+          domain: sensor
+    in_risk_binary:
+      name: "In SPC Risk Area" Binary Sensor
+      description: >
+        Binary sensor that turns ON when the location is inside any Day 1
+        categorical risk polygon.
+      default: binary_sensor.severe_weather_rv_monitor_in_spc_risk_area
+      selector:
+        entity:
+          domain: binary_sensor
+    in_moderate_high_binary:
+      name: "In Moderate or High Risk" Binary Sensor
+      description: >
+        Binary sensor that turns ON when the location is inside a Moderate or
+        High risk polygon.  Set to the same entity as above to disable this
+        second alert.
+      default: binary_sensor.severe_weather_rv_monitor_in_spc_moderate_high_risk
+      selector:
+        entity:
+          domain: binary_sensor
+    day1_tornado_sensor:
+      name: SPC Day 1 Tornado Risk Sensor
+      description: Sensor showing the tornado probability for your location.
+      default: sensor.severe_weather_rv_monitor_spc_day_1_tornado_risk
+      selector:
+        entity:
+          domain: sensor
+    day1_hail_sensor:
+      name: SPC Day 1 Hail Risk Sensor
+      description: Sensor showing the hail probability for your location.
+      default: sensor.severe_weather_rv_monitor_spc_day_1_hail_risk
+      selector:
+        entity:
+          domain: sensor
+    day1_wind_sensor:
+      name: SPC Day 1 Wind Risk Sensor
+      description: Sensor showing the wind probability for your location.
+      default: sensor.severe_weather_rv_monitor_spc_day_1_wind_risk
+      selector:
+        entity:
+          domain: sensor
+    hail_delta_sensor:
+      name: Hail Risk Delta Sensor
+      description: Numeric delta sensor for Day 1 hail risk change since last update.
+      default: sensor.severe_weather_rv_monitor_hail_risk_delta
+      selector:
+        entity:
+          domain: sensor
+    tornado_delta_sensor:
+      name: Tornado Risk Delta Sensor
+      description: Numeric delta sensor for Day 1 tornado risk change since last update.
+      default: sensor.severe_weather_rv_monitor_tornado_risk_delta
+      selector:
+        entity:
+          domain: sensor
+    wind_delta_sensor:
+      name: Wind Risk Delta Sensor
+      description: Numeric delta sensor for Day 1 wind risk change since last update.
+      default: sensor.severe_weather_rv_monitor_wind_risk_delta
+      selector:
+        entity:
+          domain: sensor
+    minimum_delta:
+      name: Minimum Hazard Delta (%)
+      description: Minimum increase needed to send a hazard escalation alert.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 30
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    dashboard_path:
+      name: Dashboard Path
+      description: Lovelace dashboard to open when the notification is tapped.
+      default: /lovelace/severe-weather
+      selector:
+        text:
+
+trigger:
+  - platform: state
+    entity_id: !input in_risk_binary
+    from: "off"
+    to: "on"
+    id: entered_risk_area
+  - platform: state
+    entity_id: !input in_moderate_high_binary
+    from: "off"
+    to: "on"
+    id: entered_moderate_high
+  - platform: state
+    entity_id: !input day1_hail_sensor
+    id: hail_changed
+  - platform: state
+    entity_id: !input day1_tornado_sensor
+    id: tornado_changed
+  - platform: state
+    entity_id: !input day1_wind_sensor
+    id: wind_changed
+
+variables:
+  risk_sensor: !input risk_sensor
+  day1_tornado_sensor: !input day1_tornado_sensor
+  day1_hail_sensor: !input day1_hail_sensor
+  day1_wind_sensor: !input day1_wind_sensor
+  hail_delta_sensor: !input hail_delta_sensor
+  tornado_delta_sensor: !input tornado_delta_sensor
+  wind_delta_sensor: !input wind_delta_sensor
+  minimum_delta: !input minimum_delta
+  risk_level: "{{ states(risk_sensor) }}"
+  tornado_risk: "{{ states(day1_tornado_sensor) }}"
+  hail_risk: "{{ states(day1_hail_sensor) }}"
+  wind_risk: "{{ states(day1_wind_sensor) }}"
+  hail_delta: "{{ states(hail_delta_sensor) | int(0) }}"
+  tornado_delta: "{{ states(tornado_delta_sensor) | int(0) }}"
+  wind_delta: "{{ states(wind_delta_sensor) | int(0) }}"
+  is_significant: >
+    {{ trigger.id == 'entered_moderate_high' }}
+  escalation_triggered: >
+    {{
+      trigger.id in ['hail_changed', 'tornado_changed', 'wind_changed']
+      and (
+        hail_delta >= minimum_delta
+        or tornado_delta >= minimum_delta
+        or wind_delta >= minimum_delta
+      )
+    }}
+  entered_new_hazard_area: >
+    {{
+      trigger.id in ['hail_changed', 'tornado_changed', 'wind_changed']
+      and (
+        (trigger.id == 'hail_changed' and trigger.from_state is not none and trigger.from_state.state in ['No Risk', '0%'] and hail_risk not in ['No Risk', '0%'])
+        or (trigger.id == 'tornado_changed' and trigger.from_state is not none and trigger.from_state.state in ['No Risk', '0%'] and tornado_risk not in ['No Risk', '0%'])
+        or (trigger.id == 'wind_changed' and trigger.from_state is not none and trigger.from_state.state in ['No Risk', '0%'] and wind_risk not in ['No Risk', '0%'])
+      )
+    }}
+
+condition:
+  - condition: template
+    value_template: >
+      {{
+        trigger.id in ['entered_risk_area', 'entered_moderate_high']
+        or entered_new_hazard_area
+        or escalation_triggered
+      }}
+
+action:
+  - service: !input notify_target
+    data:
+      title: >
+        {% if is_significant %}
+        🔴 SPC {{ risk_level }} Risk — Your Location Is in the Danger Zone
+        {% elif entered_new_hazard_area %}
+        🟠 SPC Hazard Entered Your Location
+        {% elif escalation_triggered %}
+        🟠 SPC Hazard Risk Increased
+        {% else %}
+        🟡 SPC {{ risk_level }} Risk — Your Location
+        {% endif %}
+      message: >
+        {% if entered_new_hazard_area %}
+        Your location is now inside a new SPC hazard zone.
+        {% elif escalation_triggered %}
+        SPC hazard probabilities increased at your location.
+        {% else %}
+        Your current location is inside an SPC Day 1 {{ risk_level }} categorical risk area.
+        {% endif %}
+
+        Tornado: {{ tornado_risk }} (Δ {{ tornado_delta }}%)
+        Hail: {{ hail_risk }} (Δ {{ hail_delta }}%)
+        Wind: {{ wind_risk }} (Δ {{ wind_delta }}%)
+
+        Check the Day 1 outlook and timing now.
+      data:
+        image: /api/camera_proxy/camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
+        url: !input dashboard_path
+        push:
+          category: SPCALERT

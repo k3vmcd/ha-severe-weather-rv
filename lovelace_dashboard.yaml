@@ -1,0 +1,586 @@
+title: Severe Weather RV
+views:
+  - type: sections
+    title: Command + Pirate Weather
+    path: severe-weather
+    icon: mdi:weather-lightning-rainy
+    max_columns: 2
+    sections:
+      - type: grid
+        column_span: 2
+        cards:
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.severe_weather_rv_monitor_action_level') }}
+            secondary: >-
+              {% set reasons = state_attr('sensor.severe_weather_rv_monitor_action_level', 'reasons') %}
+              {% if reasons and reasons | length > 0 %}
+              {{ reasons | join(' | ') }}
+              {% else %}
+              No immediate severe weather action required.
+              {% endif %}
+            icon: >-
+              {% set level = states('sensor.severe_weather_rv_monitor_action_level') %}
+              {% if level == 'ACT NOW' %}mdi:shield-alert
+              {% elif level == 'PREPARE' %}mdi:shield-half-full
+              {% elif level == 'MONITOR' %}mdi:shield-eye
+              {% else %}mdi:shield-check{% endif %}
+            icon_color: >-
+              {% set level = states('sensor.severe_weather_rv_monitor_action_level') %}
+              {% if level == 'ACT NOW' %}red
+              {% elif level == 'PREPARE' %}orange
+              {% elif level == 'MONITOR' %}amber
+              {% else %}green{% endif %}
+            fill_container: true
+            multiline_secondary: true
+
+          - type: entities
+            title: Severe Change Detection
+            show_header_toggle: false
+            entities:
+              - entity: sensor.severe_weather_rv_monitor_risk_change_summary
+                name: Most Recent Change
+              - entity: sensor.severe_weather_rv_monitor_hail_risk_delta
+                name: Hail Delta
+              - entity: sensor.severe_weather_rv_monitor_tornado_risk_delta
+                name: Tornado Delta
+              - entity: sensor.severe_weather_rv_monitor_wind_risk_delta
+                name: Wind Delta
+
+          - type: glance
+            show_name: true
+            show_icon: true
+            show_state: true
+            columns: 6
+            entities:
+              - entity: sensor.severe_weather_rv_monitor_spc_day_1_risk
+                name: SPC D1
+              - entity: sensor.severe_weather_rv_monitor_spc_day_1_hail_risk
+                name: Hail
+              - entity: sensor.severe_weather_rv_monitor_spc_day_1_tornado_risk
+                name: Tornado
+              - entity: sensor.severe_weather_rv_monitor_spc_day_1_wind_risk
+                name: Wind
+              - entity: sensor.severe_weather_rv_monitor_nearest_storm_distance
+                name: NHC Dist
+              - entity: sensor.severe_weather_rv_monitor_alert_count
+                name: Alerts
+
+      - type: grid
+        column_span: 2
+        cards:
+          - type: conditional
+            conditions:
+              - condition: numeric_state
+                entity: sensor.pirateweather_alerts
+                above: 0
+            card:
+              type: markdown
+              content: |
+                <ha-alert alert-type="error" title="Active Weather Alert">
+                  **{{ states('sensor.pirateweather_alerts') }} alert(s)** active at your current location. Monitor NWS for full details.
+                </ha-alert>
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Current Conditions
+          - type: weather-forecast
+            entity: weather.pirateweather
+            show_forecast: false
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.pirateweather_temperature
+                name: Temp
+                icon_color: orange
+              - type: entity
+                entity: sensor.pirateweather_apparent_temperature
+                name: Feels Like
+                icon_color: deep-orange
+              - type: entity
+                entity: sensor.pirateweather_humidity
+                name: Humidity
+                icon_color: blue
+              - type: entity
+                entity: sensor.pirateweather_dew_point
+                name: Dew Pt
+                icon_color: cyan
+              - type: entity
+                entity: sensor.pirateweather_uv_index
+                name: UV
+                icon_color: yellow
+              - type: entity
+                entity: sensor.pirateweather_cloud_coverage
+                name: Clouds
+                icon_color: grey
+            alignment: start
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.pirateweather_wind_speed
+                name: Wind
+                icon_color: green
+              - type: entity
+                entity: sensor.pirateweather_wind_gust
+                name: Gust
+                icon_color: red
+              - type: entity
+                entity: sensor.pirateweather_wind_bearing
+                name: Dir
+                icon_color: teal
+              - type: entity
+                entity: sensor.pirateweather_nearest_storm_distance
+                name: Storm
+                icon_color: purple
+              - type: entity
+                entity: sensor.pirateweather_precip_intensity
+                name: Precip
+                icon_color: indigo
+              - type: entity
+                entity: sensor.pirateweather_precip_probability
+                name: Prob
+                icon_color: light-blue
+            alignment: start
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: sensor.pirateweather_minutely_summary
+                name: "Next Hour"
+              - entity: sensor.pirateweather_hourly_summary
+                name: "Next 24h"
+              - entity: sensor.pirateweather_daily_summary
+                name: "This Week"
+              - entity: sensor.pirateweather_summary
+                name: "Currently"
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Forecast
+          - type: custom:weather-chart-card
+            entity: weather.pirateweather
+            show_main: true
+            show_attributes: true
+            animated_icons: true
+            feels_like_sensor: sensor.pirateweather_apparent_temperature
+            dew_point_sensor: sensor.pirateweather_dew_point
+            wind_speed_sensor: sensor.pirateweather_wind_speed
+            wind_bearing_sensor: sensor.pirateweather_wind_bearing
+            wind_gust_speed_sensor: sensor.pirateweather_wind_gust
+            uv_index_sensor: sensor.pirateweather_uv_index
+            weather_description_sensor: sensor.pirateweather_summary
+
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: 48-Hour Hourly Detail
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Temperature and Feels Like
+              show_states: true
+              colorize_states: true
+            graph_span: 49h
+            span:
+              start: now
+            now:
+              show: true
+              label: Now
+            apex_config:
+              chart:
+                height: 220
+              tooltip:
+                x:
+                  format: "ddd h:mm TT"
+            yaxis:
+              - apex_config:
+                  title:
+                    text: "F"
+            all_series_config:
+              stroke_width: 2
+              curve: smooth
+            series:
+              - entity: sensor.pirateweather_temperature_0h
+                name: Temperature
+                color: "#ff6b35"
+                data_generator: |
+                  const hrs=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48];
+                  return hrs.map(h=>[
+                    Date.now()+h*3600000,
+                    parseFloat(states[`sensor.pirateweather_temperature_${h}h`]?.state)
+                  ]).filter(p=>!isNaN(p[1]));
+              - entity: sensor.pirateweather_apparent_temperature_0h
+                name: Feels Like
+                color: "#ffc107"
+                opacity: 0.75
+                stroke_width: 1.5
+                data_generator: |
+                  const hrs=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48];
+                  return hrs.map(h=>[
+                    Date.now()+h*3600000,
+                    parseFloat(states[`sensor.pirateweather_apparent_temperature_${h}h`]?.state)
+                  ]).filter(p=>!isNaN(p[1]));
+
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Wind Speed and Gust
+              show_states: true
+              colorize_states: true
+            graph_span: 49h
+            span:
+              start: now
+            now:
+              show: true
+              label: Now
+            apex_config:
+              chart:
+                height: 220
+              tooltip:
+                x:
+                  format: "ddd h:mm TT"
+            all_series_config:
+              stroke_width: 2
+              curve: smooth
+            series:
+              - entity: sensor.pirateweather_wind_speed_0h
+                name: Wind
+                color: "#4caf50"
+                data_generator: |
+                  const hrs=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48];
+                  return hrs.map(h=>[
+                    Date.now()+h*3600000,
+                    parseFloat(states[`sensor.pirateweather_wind_speed_${h}h`]?.state)
+                  ]).filter(p=>!isNaN(p[1]));
+              - entity: sensor.pirateweather_wind_gust_0h
+                name: Gust
+                color: "#f44336"
+                data_generator: |
+                  const hrs=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48];
+                  return hrs.map(h=>[
+                    Date.now()+h*3600000,
+                    parseFloat(states[`sensor.pirateweather_wind_gust_${h}h`]?.state)
+                  ]).filter(p=>!isNaN(p[1]));
+
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Precip Probability and Intensity
+              show_states: true
+              colorize_states: true
+            graph_span: 49h
+            span:
+              start: now
+            now:
+              show: true
+              label: Now
+            apex_config:
+              chart:
+                height: 220
+              tooltip:
+                x:
+                  format: "ddd h:mm TT"
+            yaxis:
+              - id: prob
+                min: 0
+                max: 100
+              - id: intensity
+                opposite: true
+                min: 0
+            series:
+              - entity: sensor.pirateweather_precip_probability_0h
+                name: Probability
+                yaxis_id: prob
+                type: area
+                opacity: 0.25
+                color: "#2196F3"
+                data_generator: |
+                  const hrs=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48];
+                  return hrs.map(h=>[
+                    Date.now()+h*3600000,
+                    parseFloat(states[`sensor.pirateweather_precip_probability_${h}h`]?.state??'0')
+                  ]).filter(p=>!isNaN(p[1]));
+              - entity: sensor.pirateweather_precip_intensity_0h
+                name: Intensity
+                yaxis_id: intensity
+                type: column
+                color: "#0d47a1"
+                data_generator: |
+                  const hrs=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48];
+                  return hrs.map(h=>[
+                    Date.now()+h*3600000,
+                    parseFloat(states[`sensor.pirateweather_precip_intensity_${h}h`]?.state??'0')
+                  ]).filter(p=>!isNaN(p[1]));
+
+          - type: custom:plotly-graph
+            refresh_interval: 600
+            entities:
+              - entity: sensor.pirateweather_wind_speed_0h
+            raw_plotly_config: true
+            layout:
+              height: 320
+              paper_bgcolor: "rgba(0,0,0,0)"
+              plot_bgcolor: "rgba(0,0,0,0)"
+              font:
+                color: var(--primary-text-color)
+              polar:
+                bgcolor: "rgba(0,0,0,0)"
+                radialaxis:
+                  visible: true
+                angularaxis:
+                  direction: clockwise
+            config:
+              displayModeBar: false
+            traces:
+              - type: barpolar
+                name: "<=10 mph"
+                marker:
+                  color: "#4caf50"
+                r:
+                  $ex: >
+                    [0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48].map(h=>{
+                      const s=parseFloat(states['sensor.pirateweather_wind_speed_'+h+'h']?.state??0);
+                      return s<=10?s:0;
+                    })
+                theta:
+                  $ex: >
+                    [0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,30,36,42,48].map(h=>
+                      parseFloat(states['sensor.pirateweather_wind_bearing_'+h+'h']?.state??0)
+                    )
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Storm and Precip Details
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: sensor.pirateweather_nearest_storm_distance
+                name: Nearest Storm Distance
+              - entity: sensor.pirateweather_precip
+                name: Current Precip Type
+              - entity: sensor.pirateweather_precip_intensity
+                name: Precip Intensity (Now)
+              - entity: sensor.pirateweather_rain_intensity
+                name: Rain Intensity (Now)
+              - entity: sensor.pirateweather_snow_intensity
+                name: Snow Intensity (Now)
+              - entity: sensor.pirateweather_ice_intensity
+                name: Ice Intensity (Now)
+              - type: divider
+              - entity: sensor.pirateweather_alerts
+                name: Active Alerts
+              - entity: sensor.pirateweather_summary
+                name: Condition (Now)
+
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: 8-Day Daily Outlook
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Daily High and Low Temperature Range
+            apex_config:
+              chart:
+                height: 240
+              xaxis:
+                type: datetime
+                labels:
+                  format: "EEE"
+            series:
+              - entity: sensor.pirateweather_daytime_high_temperature_0d
+                name: High Temp Range
+                type: rangeArea
+                color: "#ff6b35"
+                data_generator: |
+                  const days=[0,1,2,3,4,5,6,7];
+                  const noon=new Date(); noon.setHours(12,0,0,0);
+                  return days.map(d=>{
+                    const hi=parseFloat(states[`sensor.pirateweather_daytime_high_temperature_${d}d`]?.state);
+                    const lo=parseFloat(states[`sensor.pirateweather_overnight_low_temperature_${d}d`]?.state);
+                    return {x:noon.getTime()+d*86400000, y:[lo,hi]};
+                  }).filter(p=>!isNaN(p.y[0])&&!isNaN(p.y[1]));
+
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Daily Precip Probability and Accumulation
+            apex_config:
+              chart:
+                height: 240
+              xaxis:
+                type: datetime
+                labels:
+                  format: "EEE"
+            yaxis:
+              - id: prob
+                min: 0
+                max: 100
+              - id: accum
+                opposite: true
+                min: 0
+            series:
+              - entity: sensor.pirateweather_precip_probability_0d
+                name: Probability
+                yaxis_id: prob
+                type: area
+                color: "#2196F3"
+                data_generator: |
+                  const days=[0,1,2,3,4,5,6,7];
+                  const noon=new Date(); noon.setHours(12,0,0,0);
+                  return days.map(d=>[
+                    noon.getTime()+d*86400000,
+                    parseFloat(states[`sensor.pirateweather_precip_probability_${d}d`]?.state??'0')
+                  ]).filter(p=>!isNaN(p[1]));
+              - entity: sensor.pirateweather_precip_accumulation_0d
+                name: Accum
+                yaxis_id: accum
+                type: column
+                color: "#0d47a1"
+                data_generator: |
+                  const days=[0,1,2,3,4,5,6,7];
+                  const noon=new Date(); noon.setHours(12,0,0,0);
+                  return days.map(d=>[
+                    noon.getTime()+d*86400000,
+                    parseFloat(states[`sensor.pirateweather_precip_accumulation_${d}d`]?.state??'0')
+                  ]).filter(p=>!isNaN(p[1]));
+
+          - type: entities
+            title: Sunrise, Sunset and Temp Peak Times
+            show_header_toggle: false
+            entities:
+              - entity: sensor.pirateweather_sunrise_0d
+                name: Today Sunrise
+              - entity: sensor.pirateweather_sunset_0d
+                name: Today Sunset
+              - entity: sensor.pirateweather_daytime_high_temperature_time_0d
+                name: Today Peak Heat
+              - entity: sensor.pirateweather_daily_low_temperature_time_0d
+                name: Today Min Temp
+
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: SPC and NHC Outlook Maps
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_spc_day_1_categorical_outlook
+            name: SPC Day 1 Categorical
+            show_state: false
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_spc_day_1_hail_probability
+            name: SPC Day 1 Hail
+            show_state: false
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_spc_day_1_tornado_probability
+            name: SPC Day 1 Tornado
+            show_state: false
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_spc_day_1_wind_probability
+            name: SPC Day 1 Wind
+            show_state: false
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook
+            name: NHC Atlantic 2-Day
+            show_state: false
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook
+            name: NHC Atlantic 7-Day
+            show_state: false
+
+  - type: sections
+    title: Weather Map
+    path: weather-map
+    icon: mdi:map-legend
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: glance
+            show_name: true
+            show_icon: true
+            show_state: true
+            columns: 6
+            entities:
+              - entity: sensor.pirateweather_temperature
+                name: Temp
+              - entity: sensor.pirateweather_apparent_temperature
+                name: Feels Like
+              - entity: sensor.pirateweather_precip_probability
+                name: Precip %
+              - entity: sensor.pirateweather_wind_speed
+                name: Wind
+              - entity: sensor.pirateweather_wind_gust
+                name: Gust
+              - entity: sensor.pirateweather_nearest_storm_distance
+                name: Storm Dist
+
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Rain and Storm Forecast - Windy (ECMWF)
+          - type: markdown
+            content: >-
+              Interactive map includes Windy timeline slider for future frames.
+          - type: custom:html-template-card
+            ignore_line_breaks: true
+            content: |
+              <iframe src="{{ states('sensor.windy_rain_url') }}"
+                width="100%" height="600px" frameborder="0"></iframe>
+
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Wind and Pressure Forecast - Windy (ECMWF)
+          - type: custom:config-template-card
+            variables:
+              LAT: states['sensor.severe_weather_rv_monitor_monitored_latitude'].state
+              LON: states['sensor.severe_weather_rv_monitor_monitored_longitude'].state
+            entities:
+              - sensor.severe_weather_rv_monitor_monitored_latitude
+              - sensor.severe_weather_rv_monitor_monitored_longitude
+            card:
+              type: iframe
+              url: >-
+                ${"https://embed.windy.com/embed2.html?lat=" + LAT + "&lon=" + LON + "&detailLat=" + LAT + "&detailLon=" + LON + "&zoom=5&level=surface&overlay=wind&product=ecmwf&menu=&message=true&marker=true&calendar=now&pressure=true&type=map&location=coordinates&detail=true&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1"}
+              aspect_ratio: 65%
+
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Live Radar - RainViewer
+          - type: markdown
+            content: >-
+              RainViewer includes built-in past/future timeline controls.
+          - type: custom:config-template-card
+            variables:
+              LAT: states['sensor.severe_weather_rv_monitor_monitored_latitude'].state
+              LON: states['sensor.severe_weather_rv_monitor_monitored_longitude'].state
+            entities:
+              - sensor.severe_weather_rv_monitor_monitored_latitude
+              - sensor.severe_weather_rv_monitor_monitored_longitude
+            card:
+              type: iframe
+              url: >-
+                ${"https://www.rainviewer.com/map.html?loc=" + LAT + "," + LON + ",7&oFa=0&oC=0&oU=0&oCS=1&oF=0&oAP=0&rmt=4&c=1&o=83&lm=0&layer=radar&sm=1&sn=1"}
+              aspect_ratio: 65%
+
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: NEXRAD Regional Radar
+          - type: markdown
+            content: >-
+              NEXRAD camera is fastest for current reflectivity. For time sliders, use RainViewer or Windy timeline above.
+          - type: picture-entity
+            entity: camera.severe_weather_rv_monitor_nexrad_regional_radar
+            name: NEXRAD Regional Radar
+            show_state: false

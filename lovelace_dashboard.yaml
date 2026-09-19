@@ -294,7 +294,7 @@ sections:
         name: Day 1 Categorical
         hold_action:
           action: url
-          url_path: https://www.spc.noaa.gov/products/outlook/
+          url_path: https://www.spc.noaa.gov/products/outlook/day1otlk.html
       - show_state: false
         show_name: true
         fit_mode: cover
@@ -327,14 +327,23 @@ sections:
         entity: image.severe_weather_rv_monitor_spc_day_2_categorical_outlook
         name: Day 2 Categorical
         show_state: false
+        hold_action:
+          action: url
+          url_path: https://www.spc.noaa.gov/products/outlook/day2otlk.html
       - type: picture-entity
         entity: image.severe_weather_rv_monitor_spc_day_2_hail_probability
         name: Day 2 Hail Prob
         show_state: false
+        hold_action:
+          action: url
+          url_path: https://www.spc.noaa.gov/products/outlook/day2otlk.html
       - type: picture-entity
         entity: image.severe_weather_rv_monitor_spc_day_2_tornado_probability
         name: Day 2 Tornado Prob
         show_state: false
+        hold_action:
+          action: url
+          url_path: https://www.spc.noaa.gov/products/outlook/day2otlk.html
       - type: picture-entity
         entity: image.severe_weather_rv_monitor_spc_day_2_wind_probability
         name: Wind Probability
@@ -350,6 +359,9 @@ sections:
         entity: image.severe_weather_rv_monitor_spc_day_3_categorical_outlook
         name: Day 3 Categorical
         show_state: false
+        hold_action:
+          action: url
+          url_path: https://www.spc.noaa.gov/products/outlook/day3otlk.html
       - type: heading
         heading: Tropical / Hurricane Outlook
       - type: picture-entity

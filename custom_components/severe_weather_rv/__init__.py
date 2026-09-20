@@ -37,9 +37,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Force a full refresh (risk sensors + SPC map images) shortly after each
     # known SPC convective-outlook issuance time, instead of waiting for the
-    # next forecast_scan_interval poll.
+    # next forecast_scan_interval / image scan_interval poll.
     async def _scheduled_spc_refresh(_now) -> None:
         await coordinator.async_force_refresh()
+        image_coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get(
+            "image_coordinator"
+        )
+        if image_coordinator is not None:
+            await image_coordinator.async_request_refresh()
 
     for hour, minute in SPC_OUTLOOK_SCHEDULE_UTC:
         b_hour, b_minute = _buffered_time(hour, minute, SPC_FETCH_DELAY_MINUTES)

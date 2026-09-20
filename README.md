@@ -18,7 +18,7 @@ Data sources: **NOAA NWS Alerts API**, **SPC (Storm Prediction Center)**, **NHC 
 - **NWS current observations** — temperature, wind, humidity, visibility from nearest ASOS/AWOS station
 - **SPC outlook risk** — point-in-polygon detection for 9 SPC GeoJSON layers (Day 1–3 categorical, Day 1–2 tornado/hail/wind probabilities)
 - **NHC storm tracking** — count and distance to all active named tropical storms
-- **Image entities** — SPC Day 1–3 categorical/probability maps + NHC Atlantic/Pacific outlooks + live NEXRAD radar tile, always pre-fetched in the background so the dashboard never has to wait for one to load
+- **Image entities** — SPC Day 1–3 categorical/probability maps + NHC Atlantic/Pacific outlooks, always pre-fetched in the background so the dashboard never has to wait for one to load
 - **Automation blueprints** — real-time threat alert + daily morning briefing, importable from the UI
 
 ---
@@ -186,7 +186,7 @@ This doesn't replace the Threat Alert / SPC Risk Area blueprints — those still
 | `binary_sensor.severe_weather_rv_monitor_thunderstorm_likely_today` | Thunderstorms mentioned in today's forecast |
 | `binary_sensor.severe_weather_rv_monitor_precipitation_active_now` | Active rain/snow at the nearest observation station |
 
-### Image Entities (13 total)
+### Image Entities (12 total)
 
 | Entity | Image |
 |--------|-------|
@@ -202,7 +202,6 @@ This doesn't replace the Threat Alert / SPC Risk Area blueprints — those still
 | `image.severe_weather_rv_monitor_nhc_atlantic_2_day_tropical_outlook` | NHC Atlantic 2-day tropical outlook |
 | `image.severe_weather_rv_monitor_nhc_atlantic_7_day_tropical_outlook` | NHC Atlantic 7-day tropical outlook |
 | `image.severe_weather_rv_monitor_nhc_eastern_pacific_2_day_tropical_outlook` | NHC Eastern Pacific 2-day outlook |
-| `image.severe_weather_rv_monitor_nexrad_regional_radar` | NEXRAD radar tile for your current location |
 
 ---
 
@@ -232,10 +231,11 @@ The included `lovelace_dashboard.yaml` is a single-view tab you can add to any e
 - `mushroom` — color-coded Action Level card
 - `config-template-card` — dynamic Windy radar centered on your GPS location (optional)
 
-If you don't have `config-template-card`, replace the Live Radar section in the YAML with:
+If you don't have `config-template-card`, replace the Live Radar section in the YAML with a plain `iframe` card pointing at a fixed location (it just won't auto-follow your GPS position):
 ```yaml
-- type: picture-entity
-  entity: image.severe_weather_rv_monitor_nexrad_regional_radar
+- type: iframe
+  url: "https://www.rainviewer.com/map.html?loc=35.0,-97.0,9&oC=true&oCS=1&oF=1&c=9&o=83&lm=1&layer=radar&sm=1&sn=1"
+  aspect_ratio: 50%
 ```
 
 ---

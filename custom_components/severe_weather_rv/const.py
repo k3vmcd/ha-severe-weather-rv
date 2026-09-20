@@ -239,7 +239,3 @@ SPC_OUTLOOK_SCHEDULE_UTC: list[tuple[int, int]] = [
 # Minutes to wait after a scheduled issuance time before fetching, so SPC has
 # time to publish the updated PNG/GeoJSON files on their web server.
 SPC_FETCH_DELAY_MINUTES: int = 5
-
-# Dispatcher signal (per config entry) sent when the SPC risk data (GeoJSON)
-# has just been refreshed, so SPC map image entities can refresh in step.
-SIGNAL_SPC_DATA_UPDATED = f"{DOMAIN}_spc_data_updated"

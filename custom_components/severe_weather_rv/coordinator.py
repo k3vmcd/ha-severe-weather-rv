@@ -11,7 +11,6 @@ import aiohttp
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -44,7 +43,6 @@ from .const import (
     STORM_PROXIMITY_FAR_MILES,
     LOCATION_CHANGE_THRESHOLD,
     MAX_FORECAST_PERIODS,
-    SIGNAL_SPC_DATA_UPDATED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -1215,7 +1213,6 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
 
         headers = {"User-Agent": NWS_USER_AGENT, "Accept": "application/geo+json"}
         timeout = aiohttp.ClientTimeout(total=15)
-        slow_tier_updated = False
 
         async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
 
@@ -1265,7 +1262,6 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
                 CONF_FORECAST_SCAN_INTERVAL, DEFAULT_FORECAST_SCAN_INTERVAL
             )
             now = time.monotonic()
-            slow_tier_updated = False
             if self._force_extended_refresh or now - self._last_forecast_fetch >= forecast_interval:
                 self._force_extended_refresh = False
                 extended: dict = {}
@@ -1276,7 +1272,6 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
                 self._cached_extended = extended
                 self._last_forecast_fetch = now
                 data.update(extended)
-                slow_tier_updated = True
 
         # ── Derive threat levels from active alert events ─────────────────
         active_events = {a["event"] for a in data["all_alerts"]}
@@ -1338,11 +1333,5 @@ class SevereWeatherCoordinator(DataUpdateCoordinator):
 
         # ── DIKA action level (computed last — uses all derived fields) ────
         data.update(_compute_action_level(data))
-
-        # ── Notify SPC map images so they refresh in step with risk sensors ──
-        if slow_tier_updated:
-            async_dispatcher_send(
-                self.hass, f"{SIGNAL_SPC_DATA_UPDATED}_{self.entry.entry_id}"
-            )
 
         return data

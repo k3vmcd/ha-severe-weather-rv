@@ -6,8 +6,17 @@ for caching: ``ImageEntity``'s picture URL embeds ``image_last_updated``, so the
 URL itself only changes when we actually publish a new picture.  HA's image proxy
 uses that to send long-lived Cache-Control/ETag headers, so the browser can serve
 the picture instantly from its own cache — across dashboard reloads, tabs, and
-brand-new sessions — until we truly have a new image.  (The camera proxy can't do
-this safely because a camera's URL/token isn't tied to the image content.)
+brand-new sessions — until we truly have a new image.
+
+Freshness is driven entirely by a ``DataUpdateCoordinator`` (``SPCImageCoordinator``)
+plus ``CoordinatorEntity``, the same proven pattern that already keeps the risk
+sensors up to date. An earlier version used bespoke per-entity timers/dispatcher
+signals to trigger refreshes, but dispatcher targets that aren't decorated with
+``@callback`` get run in a worker thread by Home Assistant — calling
+``hass.async_create_task`` from there raised a thread-safety error on every
+attempt, silently breaking every scheduled refresh. Routing everything through a
+coordinator sidesteps that whole class of bug: ``_handle_coordinator_update`` is
+always invoked correctly on the event loop by HA core.
 """
 from __future__ import annotations
 
@@ -23,11 +32,10 @@ import aiohttp
 
 from homeassistant.components.image import ImageEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -35,9 +43,7 @@ from .const import (
     SPC_IMAGE_DEFS,
     CONF_OUTLOOK_SCAN_INTERVAL,
     DEFAULT_OUTLOOK_SCAN_INTERVAL,
-    SIGNAL_SPC_DATA_UPDATED,
 )
-from .coordinator import SevereWeatherCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,6 +73,13 @@ except ImportError:  # pragma: no cover
 # first (cold-cache) dashboard load feel slow.
 _MAX_IMAGE_WIDTH = 900
 _JPEG_QUALITY = 80
+
+# Bound on how many outbound map-image fetches run at once, shared across all
+# entities. A cold-start burst of ~15 simultaneous requests to spc.noaa.gov was
+# triggering failures/slow responses; capping concurrency fixes that at the
+# small cost of some fetches queueing briefly.
+_FETCH_CONCURRENCY = 4
+_FETCH_SEMAPHORE = asyncio.Semaphore(_FETCH_CONCURRENCY)
 
 
 def _encode_jpeg(img) -> bytes:
@@ -103,78 +116,153 @@ def _optimize_standalone_image(data: bytes) -> tuple[bytes, str]:
         return data, "image/png"
 
 
-# Bound on how many outbound map-image fetches run at once, shared across all
-# entities. A cold-start burst of ~15 simultaneous requests to spc.noaa.gov was
-# triggering failures/slow responses; capping concurrency fixes that at the
-# small cost of some fetches queueing briefly.
-_FETCH_CONCURRENCY = 4
-_FETCH_SEMAPHORE = asyncio.Semaphore(_FETCH_CONCURRENCY)
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create image entities for SPC/NHC maps and the NEXRAD regional radar."""
-    coordinator: SevereWeatherCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    """Create image entities for SPC/NHC maps."""
     scan_interval = entry.options.get(CONF_OUTLOOK_SCAN_INTERVAL, DEFAULT_OUTLOOK_SCAN_INTERVAL)
+
+    image_coordinator = SPCImageCoordinator(hass, entry, scan_interval)
+    hass.data[DOMAIN][entry.entry_id]["image_coordinator"] = image_coordinator
+
     entities: list = [
-        SevereWeatherImage(hass, entry, img_def, scan_interval)
+        SevereWeatherImage(image_coordinator, entry, img_def)
         for img_def in SPC_IMAGE_DEFS
     ]
-    entities.append(RadarImage(hass, entry, coordinator, scan_interval))
-
     async_add_entities(entities)
 
-    # Warm every image's cache in the background — never block HA startup on
-    # a live fetch. Freshness is guaranteed instead by this warm-up, the
-    # periodic fallback timer below, and (for SPC) the issuance-schedule /
-    # dispatcher signal, so nothing is lost by not waiting here.
-    hass.async_create_task(_prewarm_all(entities))
-
-    # Background fallback refresh — entirely decoupled from dashboard/viewer
-    # traffic, so images stay fresh even if nobody ever opens the dashboard.
-    # SPC images are additionally kept in step with the real SPC issuance
-    # schedule and risk-sensor updates (see __init__.py / coordinator.py).
-    async def _periodic_refresh(_now) -> None:
-        await _prewarm_all(entities)
-
-    entry.async_on_unload(
-        async_track_time_interval(
-            hass, _periodic_refresh, timedelta(seconds=scan_interval)
-        )
-    )
+    # Kick off the first fetch in the background so HA startup never blocks on
+    # ~15 image requests. After this, the coordinator's own update_interval
+    # timer (proven reliable — it's the same mechanism driving the sensors)
+    # and the SPC issuance-schedule hook in __init__.py keep it fresh forever.
+    hass.async_create_task(image_coordinator.async_refresh())
 
 
-async def _prewarm_all(entities: list) -> None:
-    """Prewarm every entity concurrently (fetch concurrency is capped separately)."""
-    await asyncio.gather(*(img.async_prewarm() for img in entities))
+class SPCImageCoordinator(DataUpdateCoordinator[dict]):
+    """Coordinator that fetches/composites/optimizes all SPC/NHC map images.
 
-
-class SevereWeatherImage(ImageEntity):
-    """Image entity that fetches and caches remote weather map pictures."""
-
-    _attr_has_entity_name = True
+    Data is a dict of ``key -> (image_bytes, content_type, signature)``. Using a
+    coordinator (instead of bespoke per-entity timers) means image freshness
+    rides on the same battle-tested polling/listener machinery that already
+    reliably drives the risk sensors.
+    """
 
     def __init__(
         self,
         hass: HomeAssistant,
         entry: ConfigEntry,
-        img_def: dict,
         scan_interval: int,
     ) -> None:
-        super().__init__(hass)
-        self._hass = hass
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_images",
+            update_interval=timedelta(seconds=scan_interval),
+        )
+        self.entry = entry
+
+    async def _async_update_data(self) -> dict:
+        previous: dict = self.data or {}
+        results: dict = {}
+
+        async def _update_one(key: str, payload) -> None:
+            resolved = await payload
+            if resolved is not None:
+                results[key] = resolved
+            elif key in previous:
+                # Keep the last-known-good image on a transient failure
+                # instead of blanking out an already-working picture.
+                results[key] = previous[key]
+
+        await asyncio.gather(
+            *(
+                _update_one(img_def["key"], self._fetch_one(img_def))
+                for img_def in SPC_IMAGE_DEFS
+            )
+        )
+        return results
+
+    async def _fetch_one(self, img_def: dict) -> tuple[bytes, str, str] | None:
+        """Fetch (and composite/optimize) a single SPC/NHC image definition."""
+        layer_urls: list[str] = img_def.get("layer_urls", [])
+        if layer_urls and _PIL_AVAILABLE:
+            return await self._fetch_composite(img_def["key"], layer_urls)
+        url = layer_urls[0] if layer_urls else img_def["url"]
+        return await self._fetch_single(img_def["key"], url)
+
+    async def _fetch_single(self, key: str, url: str) -> tuple[bytes, str, str] | None:
+        """Fetch a single remote image and re-encode it smaller."""
+        payload = await _fetch_http_layer(self.hass, url)
+        if payload is None:
+            _LOGGER.warning("Image %s: failed to fetch %s", key, url)
+            return None
+        optimized, content_type = _optimize_standalone_image(payload)
+        return optimized, content_type, hashlib.sha256(optimized).hexdigest()
+
+    async def _fetch_composite(
+        self, key: str, layer_urls: list[str]
+    ) -> tuple[bytes, str, str] | None:
+        """Fetch all layers concurrently and composite them into one small JPEG."""
+        fetched = await asyncio.gather(
+            *(_fetch_http_layer(self.hass, url) for url in layer_urls)
+        )
+
+        layer_bytes: list[bytes] = []
+        base_present = False
+        for idx, data in enumerate(fetched):
+            if data is None:
+                _LOGGER.debug(
+                    "Image %s: failed to fetch layer %d (%s)", key, idx, layer_urls[idx]
+                )
+                continue
+            layer_bytes.append(data)
+            if idx == 0:
+                base_present = True
+
+        if not base_present:
+            _LOGGER.warning("Image %s: base layer failed to fetch; skipping composite", key)
+            return None
+
+        signature = _layer_signature(layer_bytes)
+        cached_composite = _get_composite_cache(signature)
+        if cached_composite is not None:
+            return cached_composite, "image/jpeg", signature
+
+        try:
+            composite = _composite_layers(layer_bytes)
+        except Exception as exc:  # pylint: disable=broad-except
+            _LOGGER.warning("Failed to composite layers for %s: %s", key, exc)
+            return None
+        if composite is None:
+            return None
+
+        _set_composite_cache(signature, composite)
+        return composite, "image/jpeg", signature
+
+
+class SevereWeatherImage(CoordinatorEntity[SPCImageCoordinator], ImageEntity):
+    """Image entity backed by SPCImageCoordinator for one SPC/NHC map picture."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: SPCImageCoordinator,
+        entry: ConfigEntry,
+        img_def: dict,
+    ) -> None:
+        CoordinatorEntity.__init__(self, coordinator)
+        ImageEntity.__init__(self, coordinator.hass)
         self._entry = entry
         self._img_def = img_def
-        self._scan_interval = scan_interval
         self._attr_name = img_def["name"]
         self._attr_unique_id = f"{entry.entry_id}_{img_def['key']}"
         self._attr_content_type = img_def["content_type"]
         self._image_cache: bytes | None = None
-        self._refresh_inflight = False
-        self._last_composite_signature: str | None = None
+        self._signature: str | None = None
+        self._apply_coordinator_data()
 
     @property
     def device_info(self) -> dict:
@@ -186,150 +274,35 @@ class SevereWeatherImage(ImageEntity):
             "entry_type": "service",
         }
 
-    @property
-    def is_spc_image(self) -> bool:
-        """Return True for SPC outlook images (as opposed to NHC)."""
-        return self._img_def["key"].startswith("spc_")
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to SPC risk-data updates so maps refresh in step with sensors."""
-        await super().async_added_to_hass()
-        if self.is_spc_image:
-            signal = f"{SIGNAL_SPC_DATA_UPDATED}_{self._entry.entry_id}"
-            self.async_on_remove(
-                async_dispatcher_connect(self._hass, signal, self._handle_spc_data_updated)
-            )
-
-    def _handle_spc_data_updated(self) -> None:
-        """Handle a dispatcher signal that new SPC risk data is available."""
-        if not self._refresh_inflight:
-            self._refresh_inflight = True
-            self._hass.async_create_task(self._async_refresh_image())
-
-    async def async_prewarm(self) -> None:
-        """Fetch the image immediately, without waiting for a viewer or schedule tick."""
-        if self._refresh_inflight:
-            return
-        self._refresh_inflight = True
-        await self._async_refresh_image()
-
-    async def async_image(self) -> bytes | None:
-        """Return the cached image — never blocks a viewer on a live fetch.
-
-        Freshness is handled entirely out-of-band: startup prewarm, the
-        periodic fallback timer, and the SPC issuance-schedule/dispatcher
-        signal (see async_setup_entry / coordinator.py) keep the cache
-        current regardless of whether anyone is viewing the dashboard.
-        """
-        if self._image_cache is None and not self._refresh_inflight:
-            self._refresh_inflight = True
-            self._hass.async_create_task(self._async_refresh_image())
-        return self._image_cache
-
-    def _store_image(self, data: bytes, content_type: str = "image/jpeg") -> None:
-        """Cache new image bytes and bump image_last_updated so the entity
-        picture URL changes — this is what lets the browser safely cache the
-        picture across dashboard loads, tabs, and sessions until it's stale.
-        """
+    def _apply_coordinator_data(self) -> bool:
+        """Pull this entity's image out of coordinator.data. Returns True if changed."""
+        payload = (self.coordinator.data or {}).get(self._img_def["key"])
+        if payload is None:
+            return False
+        data, content_type, signature = payload
+        if signature == self._signature:
+            return False
         self._image_cache = data
         self._attr_content_type = content_type
-        self._attr_image_last_updated = dt_util.utcnow()
-        if self.entity_id:
+        self._signature = signature
+        return True
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if self._apply_coordinator_data():
+            self._attr_image_last_updated = dt_util.utcnow()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Update image_last_updated only when the picture actually changed —
+        this is what lets the browser keep caching it in between.
+        """
+        if self._apply_coordinator_data():
+            self._attr_image_last_updated = dt_util.utcnow()
             self.async_write_ha_state()
 
-    async def _async_refresh_image(self) -> None:
-        """Refresh image in the background to reduce card load latency."""
-        try:
-            await self._fetch_image()
-        finally:
-            self._refresh_inflight = False
-
-    async def _fetch_image(self) -> None:
-        """Fetch the remote image, compositing all layers when available.
-
-        If ``layer_urls`` is present the images are fetched in order (bottom to top)
-        and composited with PIL.  When PIL is unavailable only the first URL (the
-        complete SPC outlook PNG) is fetched and displayed on its own.
-        For images that only define ``url`` (e.g. NHC) a simple single-image fetch
-        is performed regardless of PIL availability.
-        """
-        layer_urls: list[str] = self._img_def.get("layer_urls", [])
-        if layer_urls:
-            if _PIL_AVAILABLE:
-                await self._fetch_composite_layers(layer_urls)
-            else:
-                await self._fetch_single_url(layer_urls[0])
-        else:
-            await self._fetch_single_url(self._img_def["url"])
-
-    async def _fetch_single_url(self, url: str) -> None:
-        """Fetch a single remote image, re-encode it smaller, and update the cache."""
-        payload = await _fetch_http_layer(self._hass, url)
-        if payload is None:
-            _LOGGER.warning("Image %s: failed to fetch %s", self._img_def["key"], url)
-            return
-        optimized, content_type = _optimize_standalone_image(payload)
-        self._store_image(optimized, content_type)
-        _LOGGER.debug(
-            "Fetched %s (%d bytes, %s)", self._img_def["key"], len(optimized), content_type
-        )
-
-    async def _fetch_composite_layers(self, layer_urls: list[str]) -> None:
-        """Fetch all layers concurrently and composite them bottom-to-top into one JPEG.
-
-        The first URL is the base/bottom image (e.g. SPC's complete outlook PNG).
-        Subsequent URLs are transparent overlay PNGs (pop centres, interstates, cities).
-        Layers are fetched in parallel (not sequentially) so a cold cache still
-        completes well within HA's image-proxy request timeout.  Any layer that
-        fails to fetch is silently skipped so the remaining layers still render
-        correctly.  The composite is only stored when the bottom/base layer
-        (index 0) was fetched successfully.
-        """
-        fetched = await asyncio.gather(
-            *(_fetch_http_layer(self._hass, url) for url in layer_urls)
-        )
-
-        layer_bytes: list[bytes] = []
-        base_present = False
-
-        for idx, data in enumerate(fetched):
-            if data is None:
-                _LOGGER.debug(
-                    "Image %s: failed to fetch layer %d (%s)",
-                    self._img_def["key"], idx, layer_urls[idx],
-                )
-                continue
-            layer_bytes.append(data)
-            if idx == 0:
-                base_present = True
-
-        if not base_present:
-            _LOGGER.warning(
-                "Image %s: base layer failed to fetch; skipping composite",
-                self._img_def["key"],
-            )
-            return
-
-        signature = _layer_signature(layer_bytes)
-        if signature == self._last_composite_signature and self._image_cache is not None:
-            return
-
-        cached_composite = _get_composite_cache(signature)
-        if cached_composite is not None:
-            self._store_image(cached_composite, "image/jpeg")
-            self._last_composite_signature = signature
-            return
-
-        try:
-            composite = _composite_layers(layer_bytes)
-        except Exception as exc:  # pylint: disable=broad-except
-            _LOGGER.warning("Failed to composite layers for %s: %s", self._img_def["key"], exc)
-            return
-
-        if composite is not None:
-            self._store_image(composite, "image/jpeg")
-            self._last_composite_signature = signature
-            _set_composite_cache(signature, composite)
+    async def async_image(self) -> bytes | None:
+        return self._image_cache
 
 
 def _cache_touch(cache: OrderedDict[str, object], key: str) -> None:
@@ -426,7 +399,7 @@ def _composite_layers(layer_bytes: list[bytes]) -> bytes | None:
         return None
 
     # Decode first valid image to get the canvas dimensions
-    composite: "_PILImage.Image | None" = None  # type: ignore[name-defined]
+    composite = None
     for raw in layer_bytes:
         try:
             img = _PILImage.open(io.BytesIO(raw)).convert("RGBA")
@@ -448,147 +421,3 @@ def _composite_layers(layer_bytes: list[bytes]) -> bytes | None:
         return None
 
     return _encode_jpeg(composite)
-
-
-# ---------------------------------------------------------------------------
-# NEXRAD Regional Radar Image
-# ---------------------------------------------------------------------------
-
-# Primary: Iowa State Mesonet NEXRAD current reflectivity for a specific station.
-# Iowa State Mesonet tile cache — CONUS N0Q (base reflectivity) composite.
-# Tiles use OSM/Google Web Mercator coordinates (zoom / x / y).
-_IEM_TILE_BASE = "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0"
-_IEM_NEXRAD_CONUS = _IEM_TILE_BASE + "/nexrad-n0q-900913/{zoom}/{x}/{y}.png"
-# Station-specific fallback (requires radar_station from coordinator).
-_IEM_NEXRAD_STATION = _IEM_TILE_BASE + "/ridge::{station}-N0Q-0/{zoom}/{x}/{y}.png"
-# Zoom level — 8 ≈ 250×250 km per tile at mid-latitudes (good regional view).
-_RADAR_TILE_ZOOM = 8
-
-
-def _latlon_to_tile(lat: float, lon: float, zoom: int) -> tuple[int, int]:
-    """Convert WGS-84 coordinates to OSM/Web Mercator tile (x, y) at *zoom*."""
-    import math  # local import — math is stdlib, no install overhead
-    lat_r = math.radians(lat)
-    n = 2 ** zoom
-    x = max(0, int((lon + 180.0) / 360.0 * n))
-    y = max(0, int(
-        (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi)
-        / 2.0 * n
-    ))
-    return x, y
-
-
-class RadarImage(ImageEntity):
-    """Image entity that shows the current NEXRAD base-reflectivity radar picture.
-
-    The station-specific radar image (Iowa State Mesonet RIDGE) is preferred
-    because it gives a zoomed-in view of the RV's region.  If the station is
-    unknown or the fetch fails, the NWS national composite is used instead.
-    """
-
-    _attr_has_entity_name = True
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        entry: ConfigEntry,
-        coordinator: SevereWeatherCoordinator,
-        scan_interval: int,
-    ) -> None:
-        super().__init__(hass)
-        self._hass = hass
-        self._entry = entry
-        self._coordinator = coordinator
-        self._scan_interval = scan_interval
-        self._attr_name = "NEXRAD Regional Radar"
-        self._attr_unique_id = f"{entry.entry_id}_nexrad_radar"
-        self._attr_content_type = "image/png"
-        self._image_cache: bytes | None = None
-        self._refresh_inflight = False
-
-    @property
-    def device_info(self) -> dict:
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "Severe Weather RV Monitor",
-            "manufacturer": "NOAA / NWS / SPC / NHC",
-            "model": "Dynamic GPS-Based Weather Monitor",
-            "entry_type": "service",
-        }
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        station = (self._coordinator.data or {}).get("radar_station")
-        return {"radar_station": station or "Unknown"}
-
-    def _store_image(self, data: bytes) -> None:
-        """Cache new image bytes and bump image_last_updated (see SevereWeatherImage)."""
-        self._image_cache = data
-        self._attr_image_last_updated = dt_util.utcnow()
-        if self.entity_id:
-            self.async_write_ha_state()
-
-    async def async_prewarm(self) -> None:
-        """Fetch the image immediately, without waiting for a viewer or timer tick."""
-        if self._refresh_inflight:
-            return
-        self._refresh_inflight = True
-        try:
-            await self._fetch_image()
-        finally:
-            self._refresh_inflight = False
-
-    async def async_image(self) -> bytes | None:
-        """Return the cached radar tile — never blocks a viewer on a live fetch.
-
-        Freshness is handled entirely out-of-band by the periodic fallback
-        timer registered in async_setup_entry.
-        """
-        if self._image_cache is None and not self._refresh_inflight:
-            self._hass.async_create_task(self.async_prewarm())
-        return self._image_cache
-
-    async def _fetch_image(self) -> None:
-        """Fetch the regional radar tile from Iowa State Mesonet tile cache.
-
-        Tries the CONUS N0Q composite first (no station dependency), then falls
-        back to the station-specific RIDGE tile if ``radar_station`` is known.
-        Tile (x, y) is calculated from the current GPS coordinates so the image
-        is always centred on the RV's position.
-        """
-        cdata = self._coordinator.data or {}
-        lat = cdata.get("latitude")
-        lon = cdata.get("longitude")
-        if lat is None or lon is None:
-            return
-
-        x, y = _latlon_to_tile(lat, lon, _RADAR_TILE_ZOOM)
-        station = cdata.get("radar_station")
-
-        urls_to_try: list[str] = [
-            _IEM_NEXRAD_CONUS.format(zoom=_RADAR_TILE_ZOOM, x=x, y=y),
-        ]
-        if station:
-            urls_to_try.append(
-                _IEM_NEXRAD_STATION.format(station=station, zoom=_RADAR_TILE_ZOOM, x=x, y=y)
-            )
-
-        session = async_get_clientsession(self._hass)
-        timeout = aiohttp.ClientTimeout(total=30)
-
-        for url in urls_to_try:
-            try:
-                async with session.get(url, timeout=timeout) as resp:
-                    if resp.status == 200:
-                        payload = await resp.read()
-                        self._store_image(payload)
-                        _LOGGER.debug(
-                            "RadarImage: fetched tile %s (%d bytes)", url, len(payload)
-                        )
-                        return
-                    _LOGGER.debug("RadarImage: %s → HTTP %s", url, resp.status)
-            except Exception as exc:  # pylint: disable=broad-except
-                _LOGGER.debug("RadarImage: error fetching %s: %s", url, exc)
-
-        _LOGGER.warning("RadarImage: all tile URLs failed — no image cached")
-        # Leave self._image_cache as-is (old image or None) rather than clearing it.
